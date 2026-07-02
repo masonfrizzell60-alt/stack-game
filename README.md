@@ -1,9 +1,12 @@
 # STACK — Tower Builder
 
-Standalone copy of the STACK tower-builder game (live at
+**▶ Play it:** https://masonfrizzell60-alt.github.io/stack-game/ (share this link — works for anyone)
+
+Standalone copy of the STACK tower-builder game (original live at
 [stack.peaktiktok.com](https://stack.peaktiktok.com/)). This repo is your own
 working version so you can iterate freely without touching the production
-`ball-game-mine` / peaktiktok hub.
+`ball-game-mine` / peaktiktok hub. It's hosted free on GitHub Pages from the
+`main` branch — every push you make redeploys it in a minute or two.
 
 ## Run it
 
