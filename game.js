@@ -1810,11 +1810,11 @@ function shatterBlock(group, width, depth, color) {
     );
     overhangs.push({
       threejs: frag,
-      vy: -0.02 + Math.random() * 0.04,          // basically no pop; it just drops
-      vx: sx * (0.04 + Math.random() * 0.05),    // tiny nudge apart, not a blast
-      vz: sz * (0.04 + Math.random() * 0.05),
-      vrot: (Math.random() - 0.5) * 0.28,        // slow, gentle tumble
-      g: 0.022,                                  // light gravity -> slow, soft fall
+      vy: -0.01 + Math.random() * 0.03,          // basically no pop; it just drops
+      vx: sx * (0.03 + Math.random() * 0.04),    // tiny nudge apart, not a blast
+      vz: sz * (0.03 + Math.random() * 0.04),
+      vrot: (Math.random() - 0.5) * 0.2,         // slow, gentle tumble
+      g: 0.012,                                  // very light gravity -> slow, floaty fall
     });
   }
 }
@@ -1858,10 +1858,11 @@ function explodeTNT(n, dirAfter, cx, cz) {
   if (buildGlowEl) buildGlowEl.classList.add("down");
   sfx("dive", intensity); // falling whoosh into the drop
 
-  const steps = Math.max(1, Math.min(blocksToRemove, 46));
-  // small bombs get a SLOWER cadence so the few blocks that break are clearly
-  // visible; big bombs stay brisk. (fewer steps -> more ms per step)
-  const cadence = Math.max(55, Math.min(110, Math.round(750 / steps)));
+  const steps = Math.max(1, Math.min(blocksToRemove, 50));
+  // SLOW breakdown for every size: aim for a long, deliberate descent so each
+  // block visibly breaks off. Small bombs go slowest per block; big ones stay
+  // slow but capped so a full wipe doesn't take forever.
+  const cadence = Math.max(95, Math.min(260, Math.round(2600 / steps)));
   let i = 0, removed = 0;
   function step() {
     if (paused) { cloneBuild = setTimeout(step, 80); return; }
@@ -1873,7 +1874,7 @@ function explodeTNT(n, dirAfter, cx, cz) {
       if (b && b.threejs) {
         // shatter every on-screen block; if the shard cloud is already dense,
         // just drop the block (off-screen ones have no mesh anyway)
-        if (overhangs.length < 130) shatterBlock(b.threejs, b.width, b.depth, b.color);
+        if (overhangs.length < 150) shatterBlock(b.threejs, b.width, b.depth, b.color);
         else disposeCube(b.threejs);
         b.threejs = null;
       }
