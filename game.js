@@ -1703,6 +1703,13 @@ function startNextTNT(dirAfter) {
   const settled = stack[stack.length - 2] || top;
   const cx = settled && settled.threejs ? settled.threejs.position.x : 0;
   const cz = settled && settled.threejs ? settled.threejs.position.z : 0;
+  // Snap the sliding block back OVER the tower so it doesn't sit frozen off to
+  // the side during the blast (that was the "block stuck to the left" glitch).
+  if (top && top.threejs && top !== settled) {
+    top.threejs.position.x = cx;
+    top.threejs.position.z = cz;
+    top.x = settled.x; top.z = settled.z;
+  }
   const topSurface = BOX_HEIGHT * (stack.length - 1) + BOX_HEIGHT / 2;
   // No warp during the fall/pause — the descent warp engages only at the blast.
   buildDir = 1; buildIntensity = 0; buildAccel = 0;
@@ -1880,9 +1887,9 @@ function explodeTNT(n, dirAfter, cx, cz) {
       finishTNT(dirAfter, keepW, keepD);
       return;
     }
-    cloneBuild = setTimeout(step, 26); // constant, even cadence -> smooth, no pauses
+    cloneBuild = setTimeout(step, 55); // slower, even cadence -> the break reads clearly
   }
-  cloneBuild = setTimeout(step, 60); // tiny beat after the impact, then it drops
+  cloneBuild = setTimeout(step, 90); // a beat after the impact, then it drops
 }
 
 // After a blast: reset if wiped out, else play the next queued dynamite, else
@@ -1897,11 +1904,11 @@ function finishTNT(dirAfter, keepW, keepD) {
   buildActive = false;
   const topNow = stack[stack.length - 1];
   const nextDir = dirAfter === "x" ? "z" : "x";
-  const nx = nextDir === "x" ? -SPAWN_OFFSET : topNow.x;
-  const nz = nextDir === "z" ? -SPAWN_OFFSET : topNow.z;
   const w = Math.min(keepW, topNow.width); // a bomb never hands you a wider base
   const d = Math.min(keepD, topNow.depth);
-  addLayer(nx, nz, w, d, nextDir);
+  // Hand the next block back CENTERED over the tower (not sliding in from the far
+  // edge) so after a bomb you place it again right where the tower is.
+  addLayer(topNow.x, topNow.z, w, d, nextDir);
 }
 
 // If any dynamite is queued (e.g. it arrived mid-build), start it. Returns true
@@ -2248,7 +2255,7 @@ function startCloneBuild(n, x, z, w, d, dirAfter) {
   const total = Math.min(n, 120); // build up to 120 blocks visually
   let i = 0;
   let added = 0;
-  let delay = mega ? 40 : 95; // mega launches fast; both accelerate from here
+  let delay = mega ? 75 : 120; // slower so the rocket is watchable; accelerates from here
   function step() {
     if (paused) { cloneBuild = setTimeout(step, 120); return; } // freeze the build while paused
     i++;
@@ -2281,7 +2288,7 @@ function startCloneBuild(n, x, z, w, d, dirAfter) {
       addLayer(nx, nz, topNow.width, topNow.depth, nextDir);
       return;
     }
-    delay = Math.max(mega ? 11 : 26, delay * (mega ? 0.9 : 0.945)); // mega accelerates harder
+    delay = Math.max(mega ? 30 : 50, delay * (mega ? 0.94 : 0.965)); // slower floor, gentler accel
     cloneBuild = setTimeout(step, delay);
   }
   cloneBuild = setTimeout(step, delay);
