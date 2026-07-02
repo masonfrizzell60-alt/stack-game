@@ -1784,27 +1784,29 @@ function updateTNT(dtf) {
 // fragments as debris.
 function shatterBlock(group, width, depth, color) {
   const px = group.position.x, py = group.position.y, pz = group.position.z;
-  disposeCube(group); // the whole block is gone; it becomes pieces
-  const pieces = 4 + ((Math.random() * 2) | 0); // 4-5 chunks
+  disposeCube(group); // the whole block is gone; it becomes a spray of shards
+  const pieces = 7 + ((Math.random() * 3) | 0); // 7-9 glowing shards, dense
   for (let k = 0; k < pieces; k++) {
-    const fw = width * (0.24 + Math.random() * 0.16);
-    const fd = depth * (0.24 + Math.random() * 0.16);
-    const { group: frag } = makeCube(
-      px + (Math.random() - 0.5) * width * 0.5,
-      py + (Math.random() - 0.5) * BOX_HEIGHT * 0.7,
-      pz + (Math.random() - 0.5) * depth * 0.5,
+    const fw = width * (0.16 + Math.random() * 0.16);
+    const fd = depth * (0.16 + Math.random() * 0.16);
+    const { group: frag, mat } = makeCube(
+      px + (Math.random() - 0.5) * width * 0.7,
+      py + (Math.random() - 0.5) * BOX_HEIGHT * 0.9,
+      pz + (Math.random() - 0.5) * depth * 0.7,
       fw, fd, color
     );
-    frag.scale.y = BOX_HEIGHT * (0.35 + Math.random() * 0.35); // chunky bits, not slabs
+    if (mat) mat.emissive = new THREE.Color(color).multiplyScalar(0.5); // neon self-glow
+    frag.children.forEach((c) => { if (c.layers) c.layers.enable(BLOOM_LAYER); }); // bloom halo
+    frag.scale.y = BOX_HEIGHT * (0.22 + Math.random() * 0.4);
     const ang = Math.random() * Math.PI * 2;
-    const spd = 0.5 + Math.random() * 0.85;      // burst outward
+    const spd = 0.55 + Math.random() * 1.0;      // burst outward hard/wide
     overhangs.push({
       threejs: frag,
-      vy: 0.06 + Math.random() * 0.4,
+      vy: 0.05 + Math.random() * 0.48,
       vx: Math.cos(ang) * spd,
       vz: Math.sin(ang) * spd,
-      vrot: (Math.random() - 0.5) * 1.3,
-      g: 0.05,                                   // heavy gravity -> falls away fast
+      vrot: (Math.random() - 0.5) * 1.6,
+      g: 0.055,                                  // heavy gravity -> falls away fast
     });
   }
 }
@@ -1839,40 +1841,40 @@ function explodeTNT(n, dirAfter, cx, cz) {
   if (scoreRemoved >= startScore) blocksToRemove = removable;
   blocksToRemove = Math.max(0, Math.min(removable, blocksToRemove));
 
-  // DESCEND & BREAK APART: engage the red down-warp and blow EVERY block off the
-  // top, one after another, each bursting outward as debris — the whole removed
-  // section explodes from the top down as the tower drops.
+  // SHATTER & DROP: engage the red down-warp and rip the whole removed section
+  // apart into a dense, continuous spray of glowing shards. A CONSTANT brisk
+  // cadence (no accelerating steps, no start hold) so it never stutters/pauses,
+  // and EVERY visible block that comes off shatters (newly-exposed blocks get
+  // meshes each frame, so the shatter keeps going the whole way down).
   buildDir = -1;
-  buildIntensity = Math.max(0.55, intensity);
-  buildAccel = 0.3;
+  buildIntensity = Math.max(0.6, intensity);
+  buildAccel = 0.7;
   if (warpEl) warpEl.classList.add("down");
   if (buildGlowEl) buildGlowEl.classList.add("down");
-  sfx("dive", intensity); // falling whoosh into the descent
+  sfx("dive", intensity); // falling whoosh into the drop
 
-  const steps = Math.max(1, Math.min(blocksToRemove, 90));
-  let i = 0, removed = 0, delay = 55;
+  const steps = Math.max(1, Math.min(blocksToRemove, 46)); // brisk, ~1s total
+  let i = 0, removed = 0;
   function step() {
-    if (paused) { cloneBuild = setTimeout(step, 100); return; }
+    if (paused) { cloneBuild = setTimeout(step, 80); return; }
     i++;
-    buildAccel = Math.min(1, 0.3 + i / steps);
+    buildAccel = Math.min(1, 0.6 + i / steps);
     const removeTarget = Math.round((blocksToRemove * i) / steps);
     while (removed < removeTarget && stack.length > 1) {
       const b = stack.pop(); // never remove the foundation
       if (b && b.threejs) {
-        spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff8a3c, 5, { up: 0.7, speed: 0.34 });
-        // break the block into flying pieces; cap fragments so a huge bomb is safe
-        if (overhangs.length < 52) shatterBlock(b.threejs, b.width, b.depth, b.color);
-        else popping.push({ group: b.threejs, tw: b.width, td: b.depth, t: 0, out: true });
-        b.threejs = null; // ownership handed to the debris/shrink system
+        // shatter every on-screen block; if the shard cloud is already dense,
+        // just drop the block (off-screen ones have no mesh anyway)
+        if (overhangs.length < 130) shatterBlock(b.threejs, b.width, b.depth, b.color);
+        else disposeCube(b.threejs);
+        b.threejs = null;
       }
       removed++;
     }
-    rebuildVisible();
-    addShake(0.16);
-    if (i % 3 === 0) sfx("build", false, i); // descending arpeggio
-    // score eases from startScore down to startScore - n across the whole blast
-    const target = Math.round((n * i) / steps);
-    score = Math.max(0, startScore - target);
+    rebuildVisible(); // re-mesh newly-exposed top blocks so they shatter next frame
+    addShake(0.14);
+    if (i % 4 === 0) sfx("build", false, i); // descending rumble
+    score = Math.max(0, startScore - Math.round((n * i) / steps));
     refreshScore();
     if (i >= steps) {
       score = Math.max(0, startScore - n);
@@ -1884,10 +1886,9 @@ function explodeTNT(n, dirAfter, cx, cz) {
       finishTNT(dirAfter, keepW, keepD);
       return;
     }
-    delay = Math.max(20, delay * 0.94); // accelerate the fall
-    cloneBuild = setTimeout(step, delay);
+    cloneBuild = setTimeout(step, 22); // constant fast cadence -> smooth, no pauses
   }
-  cloneBuild = setTimeout(step, 200); // brief hold so the blast reads before the drop
+  cloneBuild = setTimeout(step, 45); // tiny beat after the flash, then rip
 }
 
 // After a blast: reset if wiped out, else play the next queued dynamite, else
