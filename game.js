@@ -48,6 +48,7 @@ let paused = false;
 let score = 0;
 let combo = 0;
 let camY = 0;          // smoothed camera pan height
+let camKick = 0;       // transient downward camera lurch on a bomb (eases back to 0)
 let actionLocked = false; // at most one drop per animation frame
 let resizePending = false;
 let particles = [];       // sparkle/star burst sprites
@@ -906,6 +907,7 @@ function resetGame() {
   score = 0;
   combo = 0;
   camY = 0;
+  camKick = 0;
   gameOver = false;
   gameStarted = false;
   paused = false;
@@ -1253,6 +1255,7 @@ function animate() {
     const goal = Math.max(0, BOX_HEIGHT * (stack.length - 2));
     // follow much faster during a gift build so the camera keeps up with it
     camY += (goal - camY) * (buildActive ? 0.45 : 0.08);
+    if (camKick < -0.02) camKick += (0 - camKick) * 0.09 * dtf; else camKick = 0; // ease the bomb lurch back
     let sx = 0, sy = 0, sz = 0;
     if (shake > 0.002) {
       sx = (Math.random() * 2 - 1) * shake;
@@ -1260,8 +1263,8 @@ function animate() {
       sz = (Math.random() * 2 - 1) * shake;
       shake *= 0.86;
     } else { shake = 0; }
-    camera.position.set(24 + sx, 22 + camY + sy, 24 + sz);
-    camera.lookAt(sx, camY + sy, sz); // shift target equally => pure translation jitter
+    camera.position.set(24 + sx, 22 + camY + camKick + sy, 24 + sz);
+    camera.lookAt(sx, camY + camKick + sy, sz); // shift target equally => pure translation jitter
 
     // Big-build warp: speed-lines, edge glow, camera zoom-out, score pump.
     // All ramp with the build's ACCELERATION (accel), scaled by gift size (bi).
@@ -1827,6 +1830,7 @@ function explodeTNT(n, dirAfter, cx, cz) {
   // ---- THE IMPACT ----  a solid thump + a puff of smoke/dust, nothing flashy
   sfx("explode", intensity);
   addShake(1.1);
+  camKick = -(11 + 9 * intensity); // whole view lurches DOWN so every bomb reads as "going down"
   spawnBurst(cx, cy, cz, 0x8a8a8a, 16, { up: 0.5, speed: 0.24, scale: 1.6 }); // smoke
   spawnBurst(cx, cy, cz, 0xa8a29a, 12, { up: 0.7, speed: 0.18, scale: 2.0 }); // more smoke
   spawnBurst(cx, cy, cz, 0xd9c8a0, 8, { up: 0.35, speed: 0.2, scale: 1.0 });  // faint dust
@@ -1854,7 +1858,10 @@ function explodeTNT(n, dirAfter, cx, cz) {
   if (buildGlowEl) buildGlowEl.classList.add("down");
   sfx("dive", intensity); // falling whoosh into the drop
 
-  const steps = Math.max(1, Math.min(blocksToRemove, 46)); // brisk, ~1s total
+  const steps = Math.max(1, Math.min(blocksToRemove, 46));
+  // small bombs get a SLOWER cadence so the few blocks that break are clearly
+  // visible; big bombs stay brisk. (fewer steps -> more ms per step)
+  const cadence = Math.max(55, Math.min(110, Math.round(750 / steps)));
   let i = 0, removed = 0;
   function step() {
     if (paused) { cloneBuild = setTimeout(step, 80); return; }
@@ -1887,7 +1894,7 @@ function explodeTNT(n, dirAfter, cx, cz) {
       finishTNT(dirAfter, keepW, keepD);
       return;
     }
-    cloneBuild = setTimeout(step, 55); // slower, even cadence -> the break reads clearly
+    cloneBuild = setTimeout(step, cadence); // even cadence (slower for small bombs)
   }
   cloneBuild = setTimeout(step, 90); // a beat after the impact, then it drops
 }
