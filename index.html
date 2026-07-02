@@ -1,0 +1,244 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#c0392b" />
+  <title>STACK — Tower Builder</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="elemental.css" />
+  <link rel="stylesheet" href="region-detail.css" />
+</head>
+<body>
+  <script src="/gate.js"></script>
+  <!-- Sky layers (JS fades each in per zone): gradient, nebula, galaxy band,
+       stars, aurora, a planet — all behind the tower and unlit. -->
+  <div id="bg"></div>
+  <div id="nebula" aria-hidden="true"></div>
+  <div id="galaxyBand" aria-hidden="true"></div>
+  <div id="stars"></div>
+  <div id="aurora" aria-hidden="true"></div>
+  <div id="planet" aria-hidden="true"></div>
+  <div id="sun" aria-hidden="true"></div>
+  <div id="shootingStars" aria-hidden="true">
+    <div class="shoot s1"></div><div class="shoot s2"></div><div class="shoot s3"></div>
+  </div>
+  <div id="core" aria-hidden="true"></div>
+  <div id="motes" aria-hidden="true"></div>
+
+  <!-- Elemental region layers (Ocean / Jungle / Storm / Frozen) -->
+  <div id="godrays" aria-hidden="true"></div>
+  <div id="bubbles" aria-hidden="true"></div>
+  <div id="junglerays" aria-hidden="true"></div>
+  <div id="pollen" aria-hidden="true"></div>
+  <div id="leaves" aria-hidden="true"></div>
+  <div id="stormclouds" aria-hidden="true"></div>
+  <div id="rain" aria-hidden="true"></div>
+  <div id="lightning" aria-hidden="true"><div class="bolt b1"></div><div class="bolt b2"></div><div class="bolt b3"></div></div>
+  <div id="frostAurora" aria-hidden="true"></div>
+  <div id="snow" aria-hidden="true"></div>
+  <div id="iceGlints" aria-hidden="true"></div>
+
+  <!-- Region detail / depth layers -->
+  <div id="jungle_farcanopy" aria-hidden="true"></div>
+  <div id="jungle_mist" aria-hidden="true"></div>
+  <div id="jungle_fireflies" aria-hidden="true"></div>
+  <div id="jungle_vignette" aria-hidden="true"></div>
+  <div id="jungle_canopy" aria-hidden="true"></div>
+  <div id="jungle_undergrowth" aria-hidden="true"></div>
+  <div id="frost_sun" aria-hidden="true"></div>
+  <div id="frost_aurora2" aria-hidden="true"></div>
+  <div id="frost_peaksFar" aria-hidden="true"></div>
+  <div id="frost_peaksMid" aria-hidden="true"></div>
+  <div id="frost_peaksNear" aria-hidden="true"></div>
+  <div id="frost_gusts" aria-hidden="true"></div>
+  <div id="storm_bankBack" aria-hidden="true"></div>
+  <div id="storm_bankFront" aria-hidden="true"></div>
+  <div id="storm_gust" aria-hidden="true"></div>
+  <div id="storm_bolts" aria-hidden="true"><div class="storm_bolt storm_boltA"></div><div class="storm_bolt storm_boltB"></div><div class="storm_bolt storm_boltC"></div></div>
+  <div id="jv2_dapple" aria-hidden="true"></div>
+  <div id="jv2_shafts" aria-hidden="true"></div>
+  <div id="jv2_foliage" aria-hidden="true"><div class="jv2_frond jv2_tl"></div><div class="jv2_frond jv2_tr"></div><div class="jv2_frond jv2_bl"></div><div class="jv2_frond jv2_br"></div></div>
+
+  <div id="bgSky"></div>
+  <div id="warp" aria-hidden="true"></div>
+  <div id="buildGlow" aria-hidden="true"></div>
+
+  <!-- Soft clouds scattered across the sky (sky zone) -->
+  <div id="clouds" aria-hidden="true">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+    <div class="cloud c4"></div>
+    <div class="cloud c5"></div>
+    <div class="cloud c6"></div>
+    <div class="cloud c7"></div>
+  </div>
+
+  <!-- Full-window 3D render surface -->
+  <div id="stage">
+    <!-- HUD -->
+    <div id="hud">
+      <div id="record">
+        <span class="record-label">WORLD RECORD!</span>
+        <span id="recordValue">0</span>
+      </div>
+      <div id="score">0</div>
+      <div id="combo"></div>
+    </div>
+    <!-- three.js canvas is appended here -->
+  </div>
+
+  <!-- Reset countdown (save it or it wipes) -->
+  <div id="resetTimer" class="hidden">
+    <div class="rt-vignette"></div>
+    <div class="rt-center">
+      <div class="rt-head">⚠ RESETTING ⚠</div>
+      <div id="rtClock" class="rt-clock">60</div>
+      <div class="rt-bar"><div id="rtFill" class="rt-fill"></div></div>
+      <div class="rt-sub">HURRY! SAVE ME!</div>
+    </div>
+  </div>
+
+  <!-- Flash messages (SAVED! / RESET! / +250 etc.) -->
+  <div id="flash"></div>
+
+  <!-- Confetti / win VFX layer -->
+  <div id="confetti" aria-hidden="true"></div>
+
+  <!-- Region-entered banner -->
+  <div id="zoneBanner"></div>
+
+  <!-- Draggable goal progress bar -->
+  <div id="goalBar" aria-hidden="true">
+    <div class="goal-top"><span class="goal-label">GOAL</span><span id="goalTarget">10,000</span></div>
+    <div class="goal-track"><div id="goalFill" class="goal-fill"></div></div>
+  </div>
+
+  <!-- Options menu (Ctrl+M) -->
+  <div id="optionsPanel">
+    <div class="opt-header">
+      <h2>OPTIONS</h2>
+      <button id="optClose" class="opt-x" aria-label="Close">✕</button>
+    </div>
+    <div class="opt-divider"></div>
+
+    <input id="optSearch" type="text" placeholder="Search settings…" autocomplete="off" />
+
+    <div class="opt-card" data-sec="Auto-assist">
+      <div class="opt-label"><span class="opt-name">Auto-assist</span><span id="assistVal" class="opt-val">10%</span></div>
+      <input id="assistRange" type="range" min="0" max="50" step="1" value="10" />
+      <p class="opt-help">How close to centered still counts as perfect. Higher is easier.</p>
+    </div>
+
+    <div class="opt-card" data-sec="Speed">
+      <div class="opt-label"><span class="opt-name">Speed</span><span id="speedVal" class="opt-val">20</span></div>
+      <input id="speedRange" type="range" min="4" max="40" step="1" value="20" />
+      <p class="opt-help">How fast the blocks move.</p>
+    </div>
+
+    <div class="opt-card" data-sec="Sound">
+      <div class="opt-label"><span class="opt-name">Sound</span><span id="volVal" class="opt-val">50%</span></div>
+      <input id="volRange" type="range" min="0" max="100" step="1" value="50" />
+      <p class="opt-help">Sound-effect volume. 0 = mute.</p>
+    </div>
+
+    <div class="opt-card" data-sec="World record">
+      <label class="opt-toggle"><span class="opt-name">Show world record</span><input type="checkbox" id="recordShow" checked /><span class="opt-sw"></span></label>
+      <div class="opt-label"><span class="opt-name">World record</span><input id="recordInput" type="number" min="0" step="1" class="opt-num" /></div>
+      <p class="opt-help">The “WORLD RECORD!” number shown on screen. Edit it to set the record to chase.</p>
+      <div class="opt-label" style="margin-top:10px;"><span class="opt-name">Record · size</span><span id="recordSizeVal" class="opt-val">100%</span></div>
+      <input id="recordSizeRange" type="range" min="50" max="250" step="5" value="100" />
+      <p class="opt-help">Drag the WORLD RECORD badge anywhere on screen with your mouse to place it. This slider scales its size.</p>
+      <div class="opt-ovl">
+        <div class="opt-ovl-label">OBS overlay link — record only</div>
+        <div class="goal-row"><input class="opt-num goal-num ovl-url" data-ovl="record" readonly placeholder="…" /><button class="ovl-copy" type="button">Copy</button></div>
+      </div>
+    </div>
+
+    <div class="opt-card" data-sec="Goals">
+      <label class="opt-toggle"><span class="opt-name">Show goal bar</span><input type="checkbox" id="goalShow" checked /><span class="opt-sw"></span></label>
+      <p class="opt-help">Add target scores — the bar walks through them in order (auto-sorted). Each one sets off a celebration, and clearing them all triggers a big win. Drag the bar to place it; an empty list hides it.</p>
+      <div id="goalList"></div>
+      <button id="addGoalBtn" class="opt-add">+ Add goal</button>
+      <div class="opt-label" style="margin-top:12px;"><span class="opt-name">Goal · size</span><span id="goalSizeVal" class="opt-val">100%</span></div>
+      <input id="goalSizeRange" type="range" min="50" max="250" step="5" value="100" />
+      <div class="opt-ovl">
+        <div class="opt-ovl-label">OBS overlay link — goal only</div>
+        <div class="goal-row"><input class="opt-num goal-num ovl-url" data-ovl="goal" readonly placeholder="…" /><button class="ovl-copy" type="button">Copy</button></div>
+      </div>
+    </div>
+
+    <div class="opt-card" data-sec="Controls">
+      <p class="opt-help">Click a key, then press any key to rebind it. (Drop also works with click.)</p>
+      <div class="keys">
+        <div class="key-row"><span>Drop block</span><kbd class="bind" data-bind="drop">Space</kbd></div>
+        <div class="key-row"><span>Pause</span><kbd class="bind" data-bind="pause">Esc</kbd></div>
+        <div class="key-row"><span>Options</span><kbd>Ctrl + M</kbd></div>
+      </div>
+      <div class="keys-divider">Gift triggers</div>
+      <div class="keys">
+        <div class="key-row"><span>Reset run (60s)</span><kbd class="bind" data-bind="reset">R</kbd></div>
+        <div class="key-row"><span>Save the run</span><kbd class="bind" data-bind="save">S</kbd></div>
+        <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up25" /> blocks</span><kbd class="bind" data-bind="up25">I</kbd></div>
+        <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up250" /> blocks</span><kbd class="bind" data-bind="up250">O</kbd></div>
+        <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up1250" /> blocks</span><kbd class="bind" data-bind="up1250">P</kbd></div>
+        <div class="key-row"><span class="amt-edit">−<input type="number" min="1" step="1" class="amt-num" data-amt="down25" /> blocks</span><kbd class="bind" data-bind="down25">K</kbd></div>
+        <div class="key-row"><span class="amt-edit">−<input type="number" min="1" step="1" class="amt-num" data-amt="down250" /> blocks</span><kbd class="bind" data-bind="down250">L</kbd></div>
+        <div class="key-row"><span class="amt-edit">−<input type="number" min="1" step="1" class="amt-num" data-amt="down1250" /> blocks</span><kbd class="bind" data-bind="down1250">J</kbd></div>
+      </div>
+      <div class="keys-divider">Size powerups</div>
+      <div class="keys">
+        <div class="key-row"><span>2× size</span><kbd class="bind" data-bind="size2x">G</kbd></div>
+        <div class="key-row"><span>½ size</span><kbd class="bind" data-bind="shrink2x">H</kbd></div>
+      </div>
+      <button id="resetBinds">RESET KEYBINDS</button>
+    </div>
+
+    <div class="opt-card" data-sec="Powerup chances">
+      <label class="opt-toggle"><span class="opt-name">Random powerups</span><input type="checkbox" id="powerupsOn" /><span class="opt-sw"></span></label>
+      <p class="opt-help">Random powerups appear on their own between gifts. Turn them all off with the switch, or set any one to 0% below.</p>
+      <div id="chanceList"></div>
+    </div>
+
+    <p class="opt-hint">Ctrl + M to open or close</p>
+  </div>
+
+  <!-- Overlays cover the FULL window -->
+  <div id="overlay" class="overlay">
+    <div class="panel">
+      <h1>STACK</h1>
+      <p id="overlayMsg">Stack the blocks as high as you can.</p>
+      <button id="startBtn">TAP TO START</button>
+      <p class="hint">Click / tap / press <b>Space</b> to drop a block &nbsp;·&nbsp; <b>Esc</b> pause &nbsp;·&nbsp; <b>Ctrl+M</b> options</p>
+    </div>
+  </div>
+
+  <div id="pauseOverlay" class="overlay hidden">
+    <div class="panel">
+      <h1>PAUSED</h1>
+      <button id="resumeBtn">RESUME</button>
+      <button id="pauseResetBtn">RESET GAME</button>
+      <p class="hint">Press <b>Esc</b> to resume</p>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Post-processing (bloom / glow), vendored locally -->
+  <script src="lib/CopyShader.js"></script>
+  <script src="lib/LuminosityHighPassShader.js"></script>
+  <script src="lib/EffectComposer.js"></script>
+  <script src="lib/ShaderPass.js"></script>
+  <script src="lib/MaskPass.js"></script>
+  <script src="lib/RenderPass.js"></script>
+  <script src="lib/UnrealBloomPass.js"></script>
+  <!-- Fat-line outline support (vendored locally, no runtime CDN dependency) -->
+  <script src="lib/LineSegmentsGeometry.js"></script>
+  <script src="lib/LineGeometry.js"></script>
+  <script src="lib/LineMaterial.js"></script>
+  <script src="lib/LineSegments2.js"></script>
+  <script src="lib/Line2.js"></script>
+  <script src="audio.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

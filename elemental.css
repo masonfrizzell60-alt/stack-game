@@ -1,0 +1,236 @@
+/* ============================================================================
+   Elemental region background layers (Ocean / Jungle / Storm / Frozen).
+   Each is a full-window, pointer-events:none overlay behind the tower, opacity
+   driven by the zone system in game.js. Motion is transform/opacity only.
+   ============================================================================ */
+
+/* When a layer is invisible, paintLayer() adds .fx-paused, which stops the
+   layer AND its particle children from animating so nothing repaints offscreen. */
+.fx-paused, .fx-paused * { animation-play-state: paused !important; }
+
+/* ---------- Ocean Depths ---------- */
+#godrays {
+  position: fixed;
+  inset: -20% -10%;
+  z-index: -4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  transform-origin: 50% 0%;
+  background:
+    repeating-linear-gradient(99deg,
+      transparent 0px, transparent 46px,
+      rgba(200,248,255,0.05) 60px, rgba(170,238,255,0.16) 78px, rgba(200,248,255,0.05) 96px,
+      transparent 110px, transparent 168px),
+    repeating-linear-gradient(102deg,
+      transparent 0px, transparent 120px,
+      rgba(150,230,255,0.10) 150px, rgba(190,245,255,0.20) 176px, rgba(150,230,255,0.10) 202px,
+      transparent 232px, transparent 360px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 42%, transparent 88%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 42%, transparent 88%);
+  animation: godraySway 14s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes godraySway {
+  from { transform: translateX(-2.5%) skewX(-2.5deg) scaleY(1); }
+  to   { transform: translateX(2.5%) skewX(2.5deg) scaleY(1.05); }
+}
+#bubbles {
+  position: fixed; inset: 0; z-index: -3; pointer-events: none; opacity: 0;
+  overflow: hidden; transition: opacity 0.8s ease;
+}
+.bubble {
+  position: absolute; bottom: -8%; border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0 8%, rgba(255,255,255,0.28) 14%, transparent 30%),
+    radial-gradient(circle at 50% 50%, rgba(170,238,255,0.22) 0 58%, rgba(120,210,235,0.30) 74%, rgba(200,248,255,0.42) 90%, transparent 100%);
+  box-shadow: inset 0 0 6px rgba(255,255,255,0.35);
+  animation-name: bubbleRise; animation-timing-function: ease-in; animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes bubbleRise {
+  0%   { transform: translate(0, 0) scale(0.85); opacity: 0; }
+  10%  { opacity: 0.9; }
+  50%  { transform: translate(14px, -52vh) scale(1); }
+  90%  { opacity: 0.9; }
+  100% { transform: translate(-10px, -108vh) scale(1.05); opacity: 0; }
+}
+
+/* ---------- Jungle Canopy ---------- */
+#junglerays {
+  position: fixed; inset: -20%; z-index: -5; pointer-events: none; opacity: 0;
+  transition: opacity 0.8s ease;
+  background:
+    repeating-linear-gradient(102deg,
+      transparent 0px, transparent 46px,
+      rgba(232,255,150,0.07) 60px, rgba(210,255,120,0.14) 78px, rgba(232,255,150,0.07) 96px,
+      transparent 112px, transparent 150px),
+    repeating-linear-gradient(102deg,
+      transparent 0px, transparent 120px,
+      rgba(255,248,180,0.10) 150px, rgba(255,240,150,0.05) 184px,
+      transparent 210px, transparent 300px);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.55) 42%, transparent 88%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.55) 42%, transparent 88%);
+  transform-origin: 50% 0%;
+  animation: jungleraySway 14s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes jungleraySway {
+  from { transform: translateX(-2.2%) rotate(-1.1deg) scaleY(1); }
+  to   { transform: translateX(2.2%) rotate(1.1deg) scaleY(1.04); }
+}
+#pollen {
+  position: fixed; inset: 0; z-index: -3; pointer-events: none; opacity: 0;
+  overflow: hidden; transition: opacity 0.8s ease;
+}
+.spore {
+  position: absolute; bottom: -6vh; border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255,255,210,0.95) 0%, rgba(216,255,130,0.75) 38%, rgba(170,235,90,0.30) 66%, transparent 100%);
+  animation-name: sporeFloat; animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes sporeFloat {
+  0%   { transform: translate3d(0, 0, 0) scale(0.85); opacity: 0; }
+  12%  { opacity: 1; }
+  50%  { transform: translate3d(3.5vw, -55vh, 0) scale(1.1); opacity: 0.95; }
+  88%  { opacity: 0.85; }
+  100% { transform: translate3d(-2vw, -112vh, 0) scale(0.8); opacity: 0; }
+}
+#leaves {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none; overflow: hidden; opacity: 0;
+  transition: opacity 0.8s ease;
+}
+.leaf {
+  position: absolute; top: -12vh;
+  background-repeat: no-repeat; background-position: center; background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg%20viewBox='0%200%2048%2048'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cpath%20d='M24%202C9%2010%204%2028%2010%2044C26%2040%2044%2028%2042%208C36%2014%2030%2016%2024%202Z'%20fill='%237ed957'/%3E%3Cpath%20d='M24%202C30%2016%2036%2014%2042%208C44%2028%2026%2040%2010%2044C12%2030%2018%2014%2024%202Z'%20fill='%234ea83a'/%3E%3Cpath%20d='M24%204C20%2018%2014%2032%2011%2043'%20stroke='%232f7d28'%20stroke-width='1.4'%20fill='none'%20stroke-linecap='round'/%3E%3C/svg%3E");
+  animation-name: leafFall; animation-timing-function: linear; animation-iteration-count: infinite;
+  will-change: transform;
+}
+@keyframes leafFall {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 0.9; }
+  50%  { transform: translate3d(-7vw, 58vh, 0) rotate(190deg); opacity: 0.9; }
+  92%  { opacity: 0.85; }
+  100% { transform: translate3d(5vw, 120vh, 0) rotate(400deg); opacity: 0; }
+}
+
+/* ---------- Stormfront ---------- */
+#stormclouds {
+  position: fixed; inset: -12%; z-index: -5; pointer-events: none; opacity: 0;
+  transition: opacity 0.8s ease;
+  background:
+    radial-gradient(46% 40% at 18% 24%, rgba(18,23,32,0.92), transparent 70%),
+    radial-gradient(52% 44% at 70% 30%, rgba(28,34,46,0.85), transparent 72%),
+    radial-gradient(60% 50% at 44% 18%, rgba(12,16,24,0.80), transparent 74%),
+    radial-gradient(50% 46% at 88% 60%, rgba(34,40,54,0.70), transparent 72%),
+    radial-gradient(56% 50% at 26% 70%, rgba(16,21,30,0.78), transparent 74%),
+    linear-gradient(to bottom, rgba(40,48,62,0.30), transparent 55%);
+  background-repeat: no-repeat;
+  animation: stormDrift 60s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes stormDrift {
+  from { transform: translate3d(-3%, -1.5%, 0) scale(1.12); }
+  to   { transform: translate3d(3%, 1.5%, 0) scale(1.2); }
+}
+#rain {
+  position: fixed; inset: 0; z-index: -3; pointer-events: none; opacity: 0;
+  overflow: hidden; transition: opacity 0.8s ease;
+}
+.raindrop {
+  position: absolute; top: -22vh; width: 2px; height: 13vh; border-radius: 2px;
+  background: linear-gradient(to bottom,
+    rgba(190,214,240,0) 0%, rgba(190,214,240,0.55) 45%, rgba(214,232,255,0.85) 60%, rgba(190,214,240,0) 100%);
+  animation-name: rainFall; animation-timing-function: linear; animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes rainFall {
+  0%  { transform: translate3d(0, -24vh, 0) rotate(16deg); opacity: 0; }
+  8%  { opacity: 1; }
+  92% { opacity: 1; }
+  100% { transform: translate3d(-34vw, 122vh, 0) rotate(16deg); opacity: 0; }
+}
+#lightning {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none; opacity: 0;
+  overflow: hidden; transition: opacity 0.8s ease;
+}
+.bolt {
+  position: absolute; inset: 0; opacity: 0;
+  animation-timing-function: ease-out; animation-iteration-count: infinite;
+  will-change: opacity;
+}
+.bolt.b1 {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(226,238,255,0.95), rgba(190,210,245,0.35) 40%, transparent 70%),
+    linear-gradient(to bottom, rgba(210,226,255,0.65), transparent 60%);
+  animation-name: strikeMain; animation-duration: 9s;
+}
+.bolt.b2 {
+  background: radial-gradient(90% 70% at 22% 8%, rgba(214,232,255,0.9), transparent 62%);
+  animation-name: strikeSide; animation-duration: 13s; animation-delay: 4.2s;
+}
+.bolt.b3 {
+  background: radial-gradient(80% 65% at 80% 30%, rgba(198,220,255,0.7), transparent 60%);
+  animation-name: strikeFar; animation-duration: 17s; animation-delay: 8.6s;
+}
+@keyframes strikeMain {
+  0%, 6% { opacity: 0; } 7% { opacity: 1; } 9% { opacity: 0.15; } 11% { opacity: 0.9; } 16% { opacity: 0; } 100% { opacity: 0; }
+}
+@keyframes strikeSide {
+  0%, 4% { opacity: 0; } 5% { opacity: 0.85; } 7% { opacity: 0.1; } 9% { opacity: 0.7; } 13% { opacity: 0; } 100% { opacity: 0; }
+}
+@keyframes strikeFar {
+  0%, 3% { opacity: 0; } 4% { opacity: 0.6; } 8% { opacity: 0; } 100% { opacity: 0; }
+}
+
+/* ---------- Frozen Peaks ---------- */
+#frostAurora {
+  position: fixed; inset: -14%; z-index: -5; pointer-events: none; opacity: 0;
+  transition: opacity 0.8s ease;
+  background:
+    radial-gradient(58% 50% at 32% -8%, rgba(150,240,205,0.40), transparent 70%),
+    radial-gradient(54% 48% at 60% -8%, rgba(175,190,255,0.34), transparent 70%),
+    radial-gradient(46% 44% at 78% -8%, rgba(255,200,235,0.28), transparent 72%),
+    radial-gradient(50% 46% at 46% -8%, rgba(170,235,255,0.30), transparent 72%);
+  transform-origin: 50% 0%;
+  animation: frostAuroraSway 18s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes frostAuroraSway {
+  from { transform: translateX(-4%) scaleY(1) scaleX(1); }
+  to   { transform: translateX(4%) scaleY(1.12) scaleX(1.05); }
+}
+#snow {
+  position: fixed; inset: 0; z-index: -3; pointer-events: none; opacity: 0;
+  overflow: hidden; transition: opacity 0.8s ease;
+}
+.flake {
+  position: absolute; top: -8vh; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #ffffff 0%, rgba(255,255,255,0.9) 45%, rgba(220,238,255,0.55) 100%);
+  opacity: 0.9;
+  animation-name: snowFall; animation-timing-function: linear; animation-iteration-count: infinite;
+  will-change: transform;
+}
+@keyframes snowFall {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(2.4vw, 118vh); }
+}
+#iceGlints {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none; opacity: 0;
+  overflow: hidden; transition: opacity 0.8s ease;
+}
+.glint {
+  position: absolute;
+  background:
+    linear-gradient(to right, transparent 46%, rgba(255,255,255,0.95) 50%, transparent 54%),
+    linear-gradient(to bottom, transparent 46%, rgba(214,240,255,0.9) 50%, transparent 54%);
+  transform: scale(0);
+  animation-name: glintTwinkle; animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes glintTwinkle {
+  0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+  50%      { transform: scale(1) rotate(45deg); opacity: 1; }
+}

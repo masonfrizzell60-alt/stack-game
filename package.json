@@ -1,0 +1,10 @@
+{
+  "name": "stack-game",
+  "version": "1.0.0",
+  "description": "STACK — Tower Builder. Standalone dev copy for iterating without touching the peaktiktok hub.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  }
+}

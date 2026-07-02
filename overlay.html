@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>STACK · Stream Overlay</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent !important; overflow: hidden;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
+
+  /* World record badge */
+  #record {
+    position: fixed; left: 50%; top: 2%; transform: translateX(-50%);
+    transform-origin: top center; display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(0, 0, 0, 0.28); padding: 6px 16px; border-radius: 999px; white-space: nowrap;
+  }
+  .record-label { color: #ffd14d; font-weight: 900; letter-spacing: 1px; font-size: 15px; text-shadow: 0 2px 0 rgba(0,0,0,0.35); }
+  #recordValue { color: #fff; font-weight: 900; font-size: 18px; background: rgba(0,0,0,0.35); padding: 1px 10px; border-radius: 8px; }
+
+  /* Goal bar */
+  #goalBar {
+    position: fixed; left: 50%; top: 86%; transform: translateX(-50%); transform-origin: top center;
+    width: 300px; max-width: 72vw; padding: 8px 14px 9px; background: rgba(0,0,0,0.34); border-radius: 14px;
+  }
+  #goalBar.hidden { display: none; }
+  .goal-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .goal-label { color: #ffd14d; font-weight: 900; letter-spacing: 1.5px; font-size: 13px; text-shadow: 0 2px 0 rgba(0,0,0,0.35); }
+  #goalTarget { color: #fff; font-weight: 900; font-size: 17px; }
+  .goal-track { height: 28px; background: rgba(0,0,0,0.42); border-radius: 999px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.4); }
+  .goal-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #2bd1c4, #36e0a0); transition: width 0.3s ease; }
+  #goalBar.pulse { animation: goalPulse 0.45s ease 2; }
+  #goalBar.pulseC { animation: goalPulseC 0.45s ease 2; }
+  #goalBar.alldone .goal-fill { background: linear-gradient(90deg, #ffd14d, #ffb02e); }
+  #goalBar.alldone .goal-label::after { content: " \1F3C6"; }
+  @keyframes goalPulse { 0%,100% { transform: translateX(-50%) scale(var(--gscale,1)); } 50% { transform: translateX(-50%) scale(calc(var(--gscale,1) * 1.07)); } }
+  @keyframes goalPulseC { 0%,100% { transform: scale(var(--gscale,1)); } 50% { transform: scale(calc(var(--gscale,1) * 1.07)); } }
+
+  /* Confetti */
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 50; overflow: hidden; }
+  .confetti-piece { position: absolute; top: -6vh; border-radius: 2px; animation-name: confettiFall; animation-timing-function: ease-in; animation-iteration-count: 1; }
+  @keyframes confettiFall { 0% { transform: translate(0,0) rotate(0deg); opacity: 1; } 100% { transform: translate(var(--drift,0), 112vh) rotate(var(--rot,360deg)); opacity: 0.85; } }
+
+  /* Connection hint (only before first data) */
+  #wait { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); color: rgba(255,255,255,.55);
+    font-weight: 700; font-size: 13px; background: rgba(0,0,0,.3); padding: 8px 14px; border-radius: 10px; }
+</style>
+</head>
+<body>
+  <div id="record"><span class="record-label">WORLD RECORD!</span><span id="recordValue">0</span></div>
+  <div id="goalBar" class="hidden">
+    <div class="goal-top"><span class="goal-label">GOAL</span><span id="goalTarget">0</span></div>
+    <div class="goal-track"><div id="goalFill" class="goal-fill"></div></div>
+  </div>
+  <div id="confetti" aria-hidden="true"></div>
+  <div id="wait">Connecting…</div>
+
+<script>
+(function () {
+  var token = location.pathname.split("/").filter(Boolean).pop();
+  var mode = (new URLSearchParams(location.search).get("show") || "both"); // both | record | goal
+  var recordEl = document.getElementById("record");
+  var recordValue = document.getElementById("recordValue");
+  var goalBar = document.getElementById("goalBar");
+  var goalTarget = document.getElementById("goalTarget");
+  var goalFill = document.getElementById("goalFill");
+  var waitEl = document.getElementById("wait");
+  var lastDone = 0, started = false;
+
+  function layout(el, x, y, size, dx, dy) {
+    el.style.left = (x == null ? dx : x) + "%";
+    el.style.top = (y == null ? dy : y) + "%";
+    var s = (size == null ? 100 : size) / 100;
+    el.style.setProperty("--gscale", s);
+    el.style.transform = "translateX(-50%) scale(" + s + ")";
+  }
+
+  function spawnConfetti(n) {
+    var cont = document.getElementById("confetti");
+    var colors = ["#ffd14d","#36e0a0","#2bd1c4","#ff5da2","#7c5cff","#ff7a1e","#ffffff"];
+    for (var i = 0; i < n; i++) {
+      var p = document.createElement("div");
+      p.className = "confetti-piece";
+      p.style.left = (Math.random()*100).toFixed(1) + "%";
+      p.style.background = colors[(Math.random()*colors.length)|0];
+      var sz = 6 + Math.random()*9;
+      p.style.width = sz.toFixed(0)+"px"; p.style.height = (sz*0.5).toFixed(0)+"px";
+      var dur = 1.6 + Math.random()*1.9;
+      p.style.animationDuration = dur.toFixed(2)+"s";
+      p.style.animationDelay = (Math.random()*0.4).toFixed(2)+"s";
+      p.style.setProperty("--rot", (Math.random()*720-360).toFixed(0)+"deg");
+      p.style.setProperty("--drift", (Math.random()*240-120).toFixed(0)+"px");
+      cont.appendChild(p);
+      (function (el, ms) { setTimeout(function(){ el.remove(); }, ms); })(p, (dur+0.6)*1000);
+    }
+  }
+  function pulse() {
+    var cls = (mode === "goal") ? "pulseC" : "pulse";
+    goalBar.classList.remove("pulse", "pulseC"); void goalBar.offsetWidth; goalBar.classList.add(cls);
+  }
+  // single-element mode: pin top-left and SCALE the element to fill the OBS browser
+  // source, so it fills whatever size you make the source (never a tiny corner blob).
+  var fitTarget = (mode === "record") ? recordEl : (mode === "goal" ? goalBar : null);
+  function fit(el) {
+    el.style.transformOrigin = "top left";
+    el.style.left = "0px"; el.style.top = "0px";
+    el.style.transform = "none";
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var sc = Math.min(window.innerWidth / r.width, window.innerHeight / r.height);
+    el.style.setProperty("--gscale", sc);
+    el.style.transform = "scale(" + sc + ")";
+  }
+  if (fitTarget) window.addEventListener("resize", function () { fit(fitTarget); });
+
+  function apply(s) {
+    if (waitEl) { waitEl.remove(); waitEl = null; }
+    // record
+    var showRecord = (mode !== "goal") && (s.recordShow !== false);
+    recordEl.style.display = showRecord ? "" : "none";
+    if (showRecord) {
+      recordValue.textContent = (+s.record || 0).toLocaleString();
+      if (mode === "record") fit(recordEl);
+      else layout(recordEl, s.recordX, s.recordY, s.recordSize, 50, 2);
+    }
+    // goal
+    var g = (s.goals || []).filter(function (n) { return n > 0; }).sort(function (a,b){ return a-b; });
+    var score = +s.score || 0;
+    var showGoal = (mode !== "record") && (s.goalShow !== false) && g.length;
+    if (!showGoal) { goalBar.classList.add("hidden"); lastDone = 0; return; }
+    goalBar.classList.remove("hidden");
+    if (mode !== "goal") layout(goalBar, s.goalX, s.goalY, s.goalSize, 50, 86);
+    var done = 0; for (var i = 0; i < g.length; i++) if (score >= g[i]) done++;
+    var allDone = done >= g.length;
+    var target = allDone ? g[g.length-1] : g[done];
+    var prev = allDone ? (g[g.length-2] || 0) : (done > 0 ? g[done-1] : 0);
+    var pct = allDone ? 100 : Math.max(0, Math.min(100, ((score - prev) / Math.max(1, target - prev)) * 100));
+    goalTarget.textContent = target.toLocaleString();
+    goalFill.style.width = pct + "%";
+    goalBar.classList.toggle("alldone", allDone);
+    if (started && done > lastDone) { pulse(); spawnConfetti(allDone ? 170 : 45); }
+    lastDone = done; started = true;
+    if (mode === "goal") fit(goalBar);
+  }
+
+  function connect() {
+    var es = new EventSource("/api/overlay/" + token + "/stream");
+    es.onmessage = function (e) { try { apply(JSON.parse(e.data)); } catch (x) {} };
+    es.onerror = function () { /* EventSource auto-reconnects */ };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
