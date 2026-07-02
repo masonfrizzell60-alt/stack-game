@@ -1784,29 +1784,27 @@ function updateTNT(dtf) {
 // fragments as debris.
 function shatterBlock(group, width, depth, color) {
   const px = group.position.x, py = group.position.y, pz = group.position.z;
-  disposeCube(group); // the whole block is gone; it becomes a spray of shards
-  const pieces = 7 + ((Math.random() * 3) | 0); // 7-9 glowing shards, dense
-  for (let k = 0; k < pieces; k++) {
-    const fw = width * (0.16 + Math.random() * 0.16);
-    const fd = depth * (0.16 + Math.random() * 0.16);
-    const { group: frag, mat } = makeCube(
-      px + (Math.random() - 0.5) * width * 0.7,
-      py + (Math.random() - 0.5) * BOX_HEIGHT * 0.9,
-      pz + (Math.random() - 0.5) * depth * 0.7,
-      fw, fd, color
+  disposeCube(group); // the block cracks into four chunks
+  // Split into 4 quadrant chunks. They separate a little, then just FALL DOWN
+  // under gravity — no sideways blast, no glow.
+  const quads = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+  for (let q = 0; q < 4; q++) {
+    const sx = quads[q][0], sz = quads[q][1];
+    const { group: frag } = makeCube(
+      px + sx * (width / 4),
+      py,
+      pz + sz * (depth / 4),
+      (width / 2) * 0.88, // small gap so the four read as separate pieces
+      (depth / 2) * 0.88,
+      color
     );
-    if (mat) mat.emissive = new THREE.Color(color).multiplyScalar(0.5); // neon self-glow
-    frag.children.forEach((c) => { if (c.layers) c.layers.enable(BLOOM_LAYER); }); // bloom halo
-    frag.scale.y = BOX_HEIGHT * (0.22 + Math.random() * 0.4);
-    const ang = Math.random() * Math.PI * 2;
-    const spd = 0.55 + Math.random() * 1.0;      // burst outward hard/wide
     overhangs.push({
       threejs: frag,
-      vy: 0.05 + Math.random() * 0.48,
-      vx: Math.cos(ang) * spd,
-      vz: Math.sin(ang) * spd,
-      vrot: (Math.random() - 0.5) * 1.6,
-      g: 0.055,                                  // heavy gravity -> falls away fast
+      vy: -0.02 + Math.random() * 0.04,          // basically no pop; it just drops
+      vx: sx * (0.04 + Math.random() * 0.05),    // tiny nudge apart, not a blast
+      vz: sz * (0.04 + Math.random() * 0.05),
+      vrot: (Math.random() - 0.5) * 0.28,        // slow, gentle tumble
+      g: 0.022,                                  // light gravity -> slow, soft fall
     });
   }
 }
@@ -1819,16 +1817,12 @@ function explodeTNT(n, dirAfter, cx, cz) {
   const cy = BOX_HEIGHT * (stack.length - 1) + BOX_HEIGHT / 2;
   const intensity = Math.min(1, n / 500);
 
-  // ---- THE BLAST ----
+  // ---- THE IMPACT ----  a solid thump + a puff of smoke/dust, nothing flashy
   sfx("explode", intensity);
-  addShake(1.5);
-  spawnShockwave(cx, cy, cz);
-  spawnShockwave(cx, cy + 1, cz); // double ring
-  spawnBurst(cx, cy, cz, 0xffffff, 22, { up: 0.6, speed: 0.75, scale: 1.5 });
-  spawnBurst(cx, cy, cz, 0xfff2c0, 36, { up: 0.7, speed: 0.62, scale: 1.3 });
-  spawnBurst(cx, cy, cz, 0xffab3d, 30, { up: 0.5, speed: 0.5, scale: 1.15 });
-  spawnBurst(cx, cy, cz, 0xff4d3a, 26, { up: 0.4, speed: 0.42, scale: 1.0 });
-  spawnBurst(cx, cy, cz, 0x555555, 22, { up: 0.9, speed: 0.28, scale: 1.7 }); // smoke
+  addShake(1.1);
+  spawnBurst(cx, cy, cz, 0x8a8a8a, 16, { up: 0.5, speed: 0.24, scale: 1.6 }); // smoke
+  spawnBurst(cx, cy, cz, 0xa8a29a, 12, { up: 0.7, speed: 0.18, scale: 2.0 }); // more smoke
+  spawnBurst(cx, cy, cz, 0xd9c8a0, 8, { up: 0.35, speed: 0.2, scale: 1.0 });  // faint dust
 
   // Remove blocks in proportion to the score removed, so the foundation is only
   // exposed when the score actually reaches 0 (mirrors the old bomb math).
@@ -1847,8 +1841,8 @@ function explodeTNT(n, dirAfter, cx, cz) {
   // and EVERY visible block that comes off shatters (newly-exposed blocks get
   // meshes each frame, so the shatter keeps going the whole way down).
   buildDir = -1;
-  buildIntensity = Math.max(0.6, intensity);
-  buildAccel = 0.7;
+  buildIntensity = Math.max(0.3, intensity * 0.5); // subtle red tint, not a full warp
+  buildAccel = 0.5;
   if (warpEl) warpEl.classList.add("down");
   if (buildGlowEl) buildGlowEl.classList.add("down");
   sfx("dive", intensity); // falling whoosh into the drop
@@ -1886,9 +1880,9 @@ function explodeTNT(n, dirAfter, cx, cz) {
       finishTNT(dirAfter, keepW, keepD);
       return;
     }
-    cloneBuild = setTimeout(step, 22); // constant fast cadence -> smooth, no pauses
+    cloneBuild = setTimeout(step, 26); // constant, even cadence -> smooth, no pauses
   }
-  cloneBuild = setTimeout(step, 45); // tiny beat after the flash, then rip
+  cloneBuild = setTimeout(step, 60); // tiny beat after the impact, then it drops
 }
 
 // After a blast: reset if wiped out, else play the next queued dynamite, else
