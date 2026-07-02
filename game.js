@@ -877,6 +877,9 @@ function resetGame() {
   particles.forEach((p) => { scene.remove(p.sprite); p.sprite.material.dispose(); });
   if (tntActive) { scene.remove(tntActive.mesh); tntActive = null; } // clear any live dynamite
   shockwaves.forEach((s) => { scene.remove(s.sprite); s.sprite.material.dispose(); });
+  if (warpEl) warpEl.classList.remove("down");   // drop any TNT descent warp
+  if (buildGlowEl) buildGlowEl.classList.remove("down");
+  buildDir = 1; buildIntensity = 0; buildAccel = 0;
   stack = [];
   overhangs = [];
   particles = [];
@@ -1163,6 +1166,8 @@ function animate() {
       const o = overhangs[i];
       o.vy -= 0.012;
       o.threejs.position.y += o.vy;
+      if (o.vx) o.threejs.position.x += o.vx;   // explosion debris flies off the sides
+      if (o.vz) o.threejs.position.z += o.vz;
       o.threejs.rotation.z += o.vrot;
       o.threejs.rotation.x += o.vrot * 0.6;
       if (o.threejs.position.y < -50) {
@@ -1682,6 +1687,10 @@ function startNextTNT(dirAfter) {
   const cx = settled && settled.threejs ? settled.threejs.position.x : 0;
   const cz = settled && settled.threejs ? settled.threejs.position.z : 0;
   const topSurface = BOX_HEIGHT * (stack.length - 1) + BOX_HEIGHT / 2;
+  // No warp during the fall/pause — the descent warp engages only at the blast.
+  buildDir = 1; buildIntensity = 0; buildAccel = 0;
+  if (warpEl) warpEl.classList.remove("down");
+  if (buildGlowEl) buildGlowEl.classList.remove("down");
   const mesh = makeDynamite();
   mesh.position.set(cx, topSurface + 9, cz); // a short, readable drop from just overhead
   mesh.rotation.z = 0.2;
@@ -1689,23 +1698,63 @@ function startNextTNT(dirAfter) {
   sfx("dive", Math.min(1, n / 500)); // falling whistle
   tntActive = {
     mesh, n, cx, cz,
+    phase: "fall",
     vy: -0.06,                  // eases in gently so the drop is watchable
     targetY: topSurface + 2.6,  // rest on top of the tower
+    armT: 0, fuseT: 0, blinkT: 0,
     spark: mesh.userData.spark,
     dirAfter: dirAfter || (top && top.direction === "x" ? "z" : "x"),
   };
 }
 
-// Per-frame fall of the live dynamite (called from animate while unpaused).
+const TNT_ARM_FRAMES = 54; // ~0.9s the crate sits armed before it blows
+
+// Per-frame TNT life: FALL onto the tower, then sit ARMED (fuse burning) before
+// it detonates. Called from animate while unpaused.
 function updateTNT(dtf) {
   const t = tntActive;
   if (!t) return;
-  t.vy -= 0.03 * dtf;                // gravity (gentle, so the fall is visible)
-  t.mesh.position.y += t.vy * dtf;
-  t.mesh.rotation.x += 0.045 * dtf;  // tumble as it falls
-  t.mesh.rotation.z += 0.015 * dtf;
-  if (t.spark) t.spark.material.opacity = 0.55 + 0.45 * Math.sin(t.mesh.position.y * 2);
-  if (t.mesh.position.y <= t.targetY) {
+
+  if (t.phase === "fall") {
+    t.vy -= 0.03 * dtf;                // gravity (gentle, so the fall is visible)
+    t.mesh.position.y += t.vy * dtf;
+    t.mesh.rotation.x += 0.045 * dtf;  // tumble as it falls
+    t.mesh.rotation.z += 0.015 * dtf;
+    if (t.spark) t.spark.material.opacity = 0.55 + 0.45 * Math.sin(t.mesh.position.y * 2);
+    if (t.mesh.position.y <= t.targetY) {
+      t.mesh.position.set(t.cx, t.targetY, t.cz);
+      t.mesh.rotation.set(0, 0, 0);
+      t.mesh.scale.set(1.28, 0.68, 1.28); // impact squash (eases back while armed)
+      t.phase = "armed";
+      sfx("tntland");
+      addShake(0.55);
+      flashMsg("💥 EXPLOSION 💥", "#ff3b30");
+    }
+    return;
+  }
+
+  // ARMED: recover from the squash, then buzz harder as the fuse burns down.
+  t.armT += dtf;
+  const p = Math.min(1, t.armT / TNT_ARM_FRAMES);
+  const rec = Math.min(1, t.armT / 8);                 // squash recovery
+  const sq = 1 + (1 - rec) * 0.28, sy = 1 - (1 - rec) * 0.32;
+  t.mesh.scale.set(sq, sy, sq);
+  const buzz = 0.05 + p * 0.55;                         // vibration grows toward the blast
+  t.mesh.position.x = t.cx + (Math.random() - 0.5) * buzz;
+  t.mesh.position.z = t.cz + (Math.random() - 0.5) * buzz;
+  t.mesh.rotation.z = (Math.random() - 0.5) * buzz * 0.12;
+  if (t.spark) {
+    const ss = 2.4 * (1 + p * 1.3);                     // fuse spark flares up
+    t.spark.scale.set(ss, ss, ss);
+    t.spark.material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(t.armT * 0.7));
+  }
+  addShake(0.04 + p * 0.2);
+  t.fuseT += dtf;
+  const every = Math.max(2.5, 9 - p * 7);               // fuse ticks quicken
+  if (t.fuseT >= every) { t.fuseT = 0; sfx("fuse", p); }
+  t.blinkT += dtf;
+  if (t.blinkT >= 15) { t.blinkT = 0; flashMsg("💥 EXPLOSION 💥", "#ff3b30"); } // blinking warning
+  if (t.armT >= TNT_ARM_FRAMES) {
     const n = t.n, dirAfter = t.dirAfter, cx = t.cx, cz = t.cz;
     scene.remove(t.mesh); // shared geo/mats — nothing to dispose
     tntActive = null;
@@ -1713,19 +1762,38 @@ function updateTNT(dtf) {
   }
 }
 
-// The blast: flash + shockwave + debris + shake, then blow blocks off the top,
-// score ticking down, and hand off to the next queued dynamite (or resume play).
+// Launch a block off the tower as a tumbling chunk that flies outward and falls.
+function flingChunk(x, y, z, width, depth, color) {
+  const { group } = makeCube(x, y, z, width, depth, color);
+  const ang = Math.random() * Math.PI * 2;
+  const spd = 0.32 + Math.random() * 0.4;
+  overhangs.push({
+    threejs: group,
+    vy: 0.22 + Math.random() * 0.3,   // pops up first, then gravity takes it
+    vx: Math.cos(ang) * spd,
+    vz: Math.sin(ang) * spd,
+    vrot: (Math.random() - 0.5) * 0.5,
+  });
+}
+
+// The blast: a huge flash/shockwave, the top blocks BREAK APART and fly off the
+// sides, then the tower DESCENDS with the same red down-warp as the old bomb,
+// score ticking down, ending on a heavy boom.
 function explodeTNT(n, dirAfter, cx, cz) {
   const top = stack[stack.length - 1];
   const cy = BOX_HEIGHT * (stack.length - 1) + BOX_HEIGHT / 2;
+  const intensity = Math.min(1, n / 500);
 
-  sfx("boom", false);   // heavy blast
-  addShake(1.0);
+  // ---- THE BLAST ----
+  sfx("explode", intensity);
+  addShake(1.5);
   spawnShockwave(cx, cy, cz);
-  spawnBurst(cx, cy, cz, 0xfff2c0, 30, { up: 0.7, speed: 0.55, scale: 1.2 });
-  spawnBurst(cx, cy, cz, 0xffab3d, 26, { up: 0.5, speed: 0.46, scale: 1.05 });
-  spawnBurst(cx, cy, cz, 0xff4d3a, 22, { up: 0.35, speed: 0.38, scale: 0.95 });
-  spawnBurst(cx, cy, cz, 0x555555, 18, { up: 0.8, speed: 0.24, scale: 1.4 }); // smoke
+  spawnShockwave(cx, cy + 1, cz); // double ring
+  spawnBurst(cx, cy, cz, 0xffffff, 22, { up: 0.6, speed: 0.75, scale: 1.5 });
+  spawnBurst(cx, cy, cz, 0xfff2c0, 36, { up: 0.7, speed: 0.62, scale: 1.3 });
+  spawnBurst(cx, cy, cz, 0xffab3d, 30, { up: 0.5, speed: 0.5, scale: 1.15 });
+  spawnBurst(cx, cy, cz, 0xff4d3a, 26, { up: 0.4, speed: 0.42, scale: 1.0 });
+  spawnBurst(cx, cy, cz, 0x555555, 22, { up: 0.9, speed: 0.28, scale: 1.7 }); // smoke
 
   // Remove blocks in proportion to the score removed, so the foundation is only
   // exposed when the score actually reaches 0 (mirrors the old bomb math).
@@ -1738,34 +1806,70 @@ function explodeTNT(n, dirAfter, cx, cz) {
   if (scoreRemoved >= startScore) blocksToRemove = removable;
   blocksToRemove = Math.max(0, Math.min(removable, blocksToRemove));
 
-  const steps = Math.max(1, Math.min(blocksToRemove, 22)); // fast, punchy tear-off
-  let i = 0, removed = 0;
+  // 1) BREAK APART: fling the top handful of blocks off the sides as debris.
+  const fling = Math.min(blocksToRemove, 7);
+  for (let k = 0; k < fling; k++) {
+    const b = stack.pop();
+    if (b && b.threejs) {
+      spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff8a3c, 5, { up: 0.8, speed: 0.4 });
+      flingChunk(b.threejs.position.x, b.threejs.position.y, b.threejs.position.z, b.width, b.depth, b.color);
+    }
+  }
+  rebuildVisible();
+
+  // 2) DESCEND: engage the red down-warp and tear off the rest, accelerating.
+  buildDir = -1;
+  buildIntensity = Math.max(0.55, intensity);
+  buildAccel = 0.3;
+  if (warpEl) warpEl.classList.add("down");
+  if (buildGlowEl) buildGlowEl.classList.add("down");
+  sfx("dive", intensity); // falling whoosh into the descent
+
+  const remaining = Math.max(0, blocksToRemove - fling);
+  const steps = Math.max(1, Math.min(remaining, 90));
+  let i = 0, removed = 0, delay = 55;
   function step() {
-    if (paused) { setTimeout(step, 60); return; }
+    if (paused) { cloneBuild = setTimeout(step, 100); return; }
     i++;
-    const removeTarget = Math.round((blocksToRemove * i) / steps);
+    buildAccel = Math.min(1, 0.3 + i / steps);
+    const removeTarget = Math.round((remaining * i) / steps);
     while (removed < removeTarget && stack.length > 1) {
       const b = stack.pop(); // never remove the foundation
       if (b && b.threejs) {
-        spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff7a3c, 6, { up: 0.9, speed: 0.32 });
+        spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff4d4d, 6, { up: 0.4, speed: 0.2 });
         popping.push({ group: b.threejs, tw: b.width, td: b.depth, t: 0, out: true });
       }
       removed++;
     }
     rebuildVisible();
-    if (i % 2 === 0) addShake(0.22);
+    addShake(0.16);
+    if (i % 3 === 0) sfx("build", false, i); // descending arpeggio
+    // score eases from startScore down to startScore - n across the whole blast
     const target = Math.round((n * i) / steps);
     score = Math.max(0, startScore - target);
     refreshScore();
-    if (i >= steps) { score = Math.max(0, startScore - n); refreshScore(); finishTNT(dirAfter, keepW, keepD); return; }
-    setTimeout(step, 34);
+    if (i >= steps) {
+      score = Math.max(0, startScore - n);
+      refreshScore();
+      sfx("boom", false); // heavy thud payoff
+      buildDir = 1; buildAccel = 0;
+      if (warpEl) warpEl.classList.remove("down");
+      if (buildGlowEl) buildGlowEl.classList.remove("down");
+      finishTNT(dirAfter, keepW, keepD);
+      return;
+    }
+    delay = Math.max(20, delay * 0.94); // accelerate the fall
+    cloneBuild = setTimeout(step, delay);
   }
-  step();
+  cloneBuild = setTimeout(step, 200); // brief hold so the blast reads before the drop
 }
 
 // After a blast: reset if wiped out, else play the next queued dynamite, else
 // hand a fresh moving block back and unfreeze.
 function finishTNT(dirAfter, keepW, keepD) {
+  buildDir = 1; buildIntensity = 0; buildAccel = 0; // make sure the warp is off
+  if (warpEl) warpEl.classList.remove("down");
+  if (buildGlowEl) buildGlowEl.classList.remove("down");
   if (score <= 0) { tntQueue = []; tntBusy = false; buildActive = false; softReset(); return; }
   if (tntQueue.length) { startNextTNT(dirAfter); return; } // chain straight into the next stick
   tntBusy = false;

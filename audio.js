@@ -185,6 +185,27 @@ window.SFX = (function () {
         noise({ dur: 0.3, f: 800, fEnd: 120, vol: 0.3 });
       }
     },
+    // TNT crate slams onto the tower: heavy wooden/metal thud
+    tntland: function () {
+      tone({ freq: 150, freqEnd: 52, type: "sine", dur: 0.24, vol: 0.42, glideDur: 0.16, lp: 1200, rev: 0.1 });
+      tone({ freq: 240, freqEnd: 90, type: "triangle", dur: 0.14, vol: 0.22, glideDur: 0.1, lp: 1800 });
+      noise({ dur: 0.09, f: 900, fEnd: 200, vol: 0.3 });
+    },
+    // burning fuse sizzle — pitch/brightness climb toward the blast (pass 0..1)
+    fuse: function (p) {
+      p = p || 0;
+      noise({ dur: 0.06, bp: true, f: 4200 + 4200 * p, q: 2.2, vol: 0.1 + 0.12 * p });
+      tone({ freq: 1100 + 1400 * p, type: "square", dur: 0.035, vol: 0.05 + 0.06 * p, lp: 6500 });
+    },
+    // the big one: bright crack + punchy body + deep sub + rolling rumble tail
+    explode: function (intensity) {
+      const v = 0.6 + 0.4 * (intensity || 0);
+      noise({ dur: 0.13, f: 8500, fEnd: 380, vol: 0.55 * v });                                   // initial crack
+      tone({ freq: 190, freqEnd: 40, type: "sawtooth", dur: 0.55, vol: 0.5 * v, glideDur: 0.3, lp: 1500, lpEnd: 200, rev: 0.28 }); // body
+      tone({ freq: 92, freqEnd: 26, type: "sine", dur: 0.8, vol: 0.6 * v, glideDur: 0.55, rev: 0.22 }); // deep sub
+      noise({ dur: 0.7, f: 520, fEnd: 80, vol: 0.32 * v, rev: 0.35 });                             // rumble tail
+      noise({ dur: 0.28, bp: true, f: 2700, fEnd: 650, q: 1.2, vol: 0.22 * v, when: 0.05 });       // debris crackle
+    },
     save: function () {
       [523, 659, 784].forEach(function (f, k) { tone({ freq: f, type: "sine", dur: 0.28, vol: 0.34, when: k * 0.08, fm: { ratio: 2, depth: 0.35 }, lp: 7000, rev: 0.3 }); });
     },
