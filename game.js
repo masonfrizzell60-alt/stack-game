@@ -70,6 +70,7 @@ let tntQueue = [];        // pending down amounts waiting for their own dynamite
 let tntActive = null;     // the dynamite currently falling: { mesh, n, vy, targetY, spark, dirAfter }
 let tntBusy = false;      // a full drop+explode+remove sequence is running
 let shockwaves = [];      // expanding blast-flash sprites
+let auraRings = [];       // rising transparent rings on a big (+500) rocket build
 let shake = 0;            // current camera-shake intensity (world units)
 let lastFrameTime = 0;    // for frame-rate-independent block movement
 let displayedScore = 0;   // smoothed score driving the sky (eases on gift jumps)
@@ -877,6 +878,7 @@ function resetGame() {
   particles.forEach((p) => { scene.remove(p.sprite); p.sprite.material.dispose(); });
   if (tntActive) { scene.remove(tntActive.mesh); tntActive = null; } // clear any live dynamite
   shockwaves.forEach((s) => { scene.remove(s.sprite); s.sprite.material.dispose(); });
+  auraRings.forEach((r) => { scene.remove(r.mesh); r.mat.dispose(); });
   if (warpEl) warpEl.classList.remove("down");   // drop any TNT descent warp
   if (buildGlowEl) buildGlowEl.classList.remove("down");
   buildDir = 1; buildIntensity = 0; buildAccel = 0;
@@ -884,6 +886,7 @@ function resetGame() {
   overhangs = [];
   particles = [];
   shockwaves = [];
+  auraRings = [];
   tntQueue = [];
   tntBusy = false;
   pulsing = null;
@@ -1179,6 +1182,7 @@ function animate() {
     updateParticles(); // sparkle / star bursts
     updateTNT(dtf);        // falling dynamite
     updateShockwaves(dtf); // blast flashes
+    updateAuraRings(dtf);  // big-rocket rings
 
     // white face flash on perfects -> fade the cube's emissive back to normal
     for (let i = faceFlashes.length - 1; i >= 0; i--) {
@@ -1775,20 +1779,34 @@ function updateTNT(dtf) {
   }
 }
 
-// Blast a block off the tower: take the block's OWN mesh and send it tumbling
-// outward, falling away fast. (Reusing the mesh is important — creating a new
-// one would leave the original stuck on screen.)
-function flingChunk(group) {
-  const ang = Math.random() * Math.PI * 2;
-  const spd = 0.55 + Math.random() * 0.7;       // strong outward burst
-  overhangs.push({
-    threejs: group,
-    vy: -0.05 + Math.random() * 0.28,           // mostly out/flat, only a little pop
-    vx: Math.cos(ang) * spd,
-    vz: Math.sin(ang) * spd,
-    vrot: (Math.random() - 0.5) * 0.8,
-    g: 0.045,                                   // heavy gravity -> flies off fast
-  });
+// Shatter a block into several small chunks that fly off the sides and fall
+// away. Disposes the block's own mesh (so nothing is left stuck) and spawns the
+// fragments as debris.
+function shatterBlock(group, width, depth, color) {
+  const px = group.position.x, py = group.position.y, pz = group.position.z;
+  disposeCube(group); // the whole block is gone; it becomes pieces
+  const pieces = 4 + ((Math.random() * 2) | 0); // 4-5 chunks
+  for (let k = 0; k < pieces; k++) {
+    const fw = width * (0.24 + Math.random() * 0.16);
+    const fd = depth * (0.24 + Math.random() * 0.16);
+    const { group: frag } = makeCube(
+      px + (Math.random() - 0.5) * width * 0.5,
+      py + (Math.random() - 0.5) * BOX_HEIGHT * 0.7,
+      pz + (Math.random() - 0.5) * depth * 0.5,
+      fw, fd, color
+    );
+    frag.scale.y = BOX_HEIGHT * (0.35 + Math.random() * 0.35); // chunky bits, not slabs
+    const ang = Math.random() * Math.PI * 2;
+    const spd = 0.5 + Math.random() * 0.85;      // burst outward
+    overhangs.push({
+      threejs: frag,
+      vy: 0.06 + Math.random() * 0.4,
+      vx: Math.cos(ang) * spd,
+      vz: Math.sin(ang) * spd,
+      vrot: (Math.random() - 0.5) * 1.3,
+      g: 0.05,                                   // heavy gravity -> falls away fast
+    });
+  }
 }
 
 // The blast: a huge flash/shockwave, the top blocks BREAK APART and fly off the
@@ -1842,8 +1860,8 @@ function explodeTNT(n, dirAfter, cx, cz) {
       const b = stack.pop(); // never remove the foundation
       if (b && b.threejs) {
         spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff8a3c, 5, { up: 0.7, speed: 0.34 });
-        // fly the block's OWN mesh apart; cap live debris so a huge bomb is safe
-        if (overhangs.length < 40) flingChunk(b.threejs);
+        // break the block into flying pieces; cap fragments so a huge bomb is safe
+        if (overhangs.length < 52) shatterBlock(b.threejs, b.width, b.depth, b.color);
         else popping.push({ group: b.threejs, tw: b.width, td: b.depth, t: 0, out: true });
         b.threejs = null; // ownership handed to the debris/shrink system
       }
@@ -1923,6 +1941,39 @@ function updateShockwaves(dtf) {
       scene.remove(s.sprite);
       s.sprite.material.dispose();
       shockwaves.splice(i, 1);
+    }
+  }
+}
+
+// Big-rocket aura: transparent glowing rings that shoot up the tower during a
+// huge (+500) up-build, then fade so everything returns to normal.
+let auraTorusGeo = null;
+function spawnAuraRing(y) {
+  if (auraRings.length >= 12) return; // keep it a handful of ripples, never a whiteout
+  if (!auraTorusGeo) auraTorusGeo = new THREE.TorusGeometry(10, 0.32, 8, 44);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xdff1ff, transparent: true, opacity: 0.4,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const ring = new THREE.Mesh(auraTorusGeo, mat);
+  ring.rotation.x = Math.PI / 2; // lie flat, wrapping the tower
+  ring.position.set(0, y, 0);
+  ring.scale.set(0.7, 0.7, 0.7);
+  scene.add(ring);
+  auraRings.push({ mesh: ring, mat, vy: 0.8, life: 1 });
+}
+function updateAuraRings(dtf) {
+  for (let i = auraRings.length - 1; i >= 0; i--) {
+    const r = auraRings[i];
+    r.life -= 0.028 * dtf;
+    r.mesh.position.y += r.vy * dtf;   // rush upward
+    const s = 0.7 + (1 - r.life) * 1.5; // expand outward as it fades
+    r.mesh.scale.set(s, s, s);
+    r.mat.opacity = Math.max(0, r.life) * 0.8;
+    if (r.life <= 0) {
+      scene.remove(r.mesh);
+      r.mat.dispose();
+      auraRings.splice(i, 1);
     }
   }
 }
@@ -2192,7 +2243,9 @@ function cashPending(topNow, dirAfter, maxW, maxD) {
 function startCloneBuild(n, x, z, w, d, dirAfter) {
   if (cloneBuild) { clearTimeout(cloneBuild); clearInterval(cloneBuild); }
   buildActive = true;
-  buildIntensity = Math.min(1, n / 1000); // +25 barely, +1250 full warp
+  // +500 or bigger = a MEGA rocket: super fast, full warp, transparent aura rings.
+  const mega = n >= 500;
+  buildIntensity = mega ? 1 : Math.min(1, n / 1000); // +25 barely, +1250 full warp
   buildDir = 1; // rocketing up: streaks fall, green glow
   if (warpEl) warpEl.classList.remove("down");
   if (buildGlowEl) buildGlowEl.classList.remove("down");
@@ -2200,7 +2253,7 @@ function startCloneBuild(n, x, z, w, d, dirAfter) {
   const total = Math.min(n, 120); // build up to 120 blocks visually
   let i = 0;
   let added = 0;
-  let delay = 95; // starts slow, then accelerates (camera tracks it)
+  let delay = mega ? 40 : 95; // mega launches fast; both accelerate from here
   function step() {
     if (paused) { cloneBuild = setTimeout(step, 120); return; } // freeze the build while paused
     i++;
@@ -2211,8 +2264,9 @@ function startCloneBuild(n, x, z, w, d, dirAfter) {
       g.scale.set(w * 0.2, BOX_HEIGHT * 0.2, d * 0.2); // start small, pop up
       popping.push({ group: g, tw: w, td: d, t: 0 });
       if (i % 2 === 0) spawnBurst(g.position.x, g.position.y + BOX_HEIGHT / 2, g.position.z, 0xffd24d, 7, { up: 0.9, speed: 0.16 });
+      if (mega && i % 4 === 0) spawnAuraRing(g.position.y - BOX_HEIGHT * 3); // rings rush up the tower
     }
-    addShake(0.12); // continuous rumble as it stacks
+    addShake(mega ? 0.2 : 0.12); // continuous rumble as it stacks
     if (i % 3 === 0) sfx("build", true, i); // ascending arpeggio (thinned out)
     const target = Math.round((n * i) / total); // climb the score toward +n
     score += target - added;
@@ -2232,7 +2286,7 @@ function startCloneBuild(n, x, z, w, d, dirAfter) {
       addLayer(nx, nz, topNow.width, topNow.depth, nextDir);
       return;
     }
-    delay = Math.max(26, delay * 0.945); // accelerate (gentler, stays watchable)
+    delay = Math.max(mega ? 11 : 26, delay * (mega ? 0.9 : 0.945)); // mega accelerates harder
     cloneBuild = setTimeout(step, delay);
   }
   cloneBuild = setTimeout(step, delay);
@@ -2380,6 +2434,7 @@ function doReset() {
 function saveRun() {
   addShake(0.5);
   sfx("save");
+  spawnConfetti(120); // celebrate the save
   if (resetActive) { cancelReset(true); return; } // a save cancels the countdown
   saveSetting("stack_savedScore", score);
   flashMsg("SAVED!", "#6bff5a");
