@@ -1164,7 +1164,7 @@ function animate() {
     // falling overhang pieces tumble into the void
     for (let i = overhangs.length - 1; i >= 0; i--) {
       const o = overhangs[i];
-      o.vy -= 0.012;
+      o.vy -= (o.g || 0.012);                   // explosion debris falls faster (heavier g)
       o.threejs.position.y += o.vy;
       if (o.vx) o.threejs.position.x += o.vx;   // explosion debris flies off the sides
       if (o.vz) o.threejs.position.z += o.vz;
@@ -1762,17 +1762,19 @@ function updateTNT(dtf) {
   }
 }
 
-// Launch a block off the tower as a tumbling chunk that flies outward and falls.
+// Blast a block off the tower as a tumbling chunk that flies outward and falls
+// away fast (heavy gravity so it clears the screen instead of hanging).
 function flingChunk(x, y, z, width, depth, color) {
   const { group } = makeCube(x, y, z, width, depth, color);
   const ang = Math.random() * Math.PI * 2;
-  const spd = 0.32 + Math.random() * 0.4;
+  const spd = 0.55 + Math.random() * 0.7;       // strong outward burst
   overhangs.push({
     threejs: group,
-    vy: 0.22 + Math.random() * 0.3,   // pops up first, then gravity takes it
+    vy: -0.05 + Math.random() * 0.28,           // mostly out/flat, only a little pop
     vx: Math.cos(ang) * spd,
     vz: Math.sin(ang) * spd,
-    vrot: (Math.random() - 0.5) * 0.5,
+    vrot: (Math.random() - 0.5) * 0.8,
+    g: 0.045,                                   // heavy gravity -> flies off fast
   });
 }
 
@@ -1806,18 +1808,9 @@ function explodeTNT(n, dirAfter, cx, cz) {
   if (scoreRemoved >= startScore) blocksToRemove = removable;
   blocksToRemove = Math.max(0, Math.min(removable, blocksToRemove));
 
-  // 1) BREAK APART: fling the top handful of blocks off the sides as debris.
-  const fling = Math.min(blocksToRemove, 7);
-  for (let k = 0; k < fling; k++) {
-    const b = stack.pop();
-    if (b && b.threejs) {
-      spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff8a3c, 5, { up: 0.8, speed: 0.4 });
-      flingChunk(b.threejs.position.x, b.threejs.position.y, b.threejs.position.z, b.width, b.depth, b.color);
-    }
-  }
-  rebuildVisible();
-
-  // 2) DESCEND: engage the red down-warp and tear off the rest, accelerating.
+  // DESCEND & BREAK APART: engage the red down-warp and blow EVERY block off the
+  // top, one after another, each bursting outward as debris — the whole removed
+  // section explodes from the top down as the tower drops.
   buildDir = -1;
   buildIntensity = Math.max(0.55, intensity);
   buildAccel = 0.3;
@@ -1825,19 +1818,20 @@ function explodeTNT(n, dirAfter, cx, cz) {
   if (buildGlowEl) buildGlowEl.classList.add("down");
   sfx("dive", intensity); // falling whoosh into the descent
 
-  const remaining = Math.max(0, blocksToRemove - fling);
-  const steps = Math.max(1, Math.min(remaining, 90));
+  const steps = Math.max(1, Math.min(blocksToRemove, 90));
   let i = 0, removed = 0, delay = 55;
   function step() {
     if (paused) { cloneBuild = setTimeout(step, 100); return; }
     i++;
     buildAccel = Math.min(1, 0.3 + i / steps);
-    const removeTarget = Math.round((remaining * i) / steps);
+    const removeTarget = Math.round((blocksToRemove * i) / steps);
     while (removed < removeTarget && stack.length > 1) {
       const b = stack.pop(); // never remove the foundation
       if (b && b.threejs) {
-        spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff4d4d, 6, { up: 0.4, speed: 0.2 });
-        popping.push({ group: b.threejs, tw: b.width, td: b.depth, t: 0, out: true });
+        spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff8a3c, 5, { up: 0.7, speed: 0.34 });
+        // fly the block apart; cap live debris so a huge bomb doesn't tank perf
+        if (overhangs.length < 40) flingChunk(b.threejs.position.x, b.threejs.position.y, b.threejs.position.z, b.width, b.depth, b.color);
+        else popping.push({ group: b.threejs, tw: b.width, td: b.depth, t: 0, out: true });
       }
       removed++;
     }
