@@ -1634,10 +1634,12 @@ let dynAssets = null;
 function ensureDynAssets() {
   if (dynAssets) return dynAssets;
   dynAssets = {
-    crate: new THREE.BoxGeometry(4.6, 4.6, 4.6),
-    band: new THREE.BoxGeometry(4.9, 1.15, 4.9),
-    body: new THREE.MeshPhongMaterial({ color: 0xd8342a, emissive: 0x3a0a06, shininess: 26, specular: 0x552018 }),
-    tape: new THREE.MeshPhongMaterial({ color: 0x241009, emissive: 0x0a0402, shininess: 8 }),
+    stick: new THREE.CylinderGeometry(0.44, 0.44, 3.0, 16),
+    band: new THREE.CylinderGeometry(0.47, 0.47, 0.55, 16),
+    fuse: new THREE.CylinderGeometry(0.09, 0.09, 1.3, 8),
+    body: new THREE.MeshPhongMaterial({ color: 0xd8342a, emissive: 0x3a0a06, shininess: 28, specular: 0x552018 }),
+    tape: new THREE.MeshPhongMaterial({ color: 0xf2c14e, emissive: 0x2a1e06, shininess: 10 }), // yellow band
+    fuseMat: new THREE.MeshPhongMaterial({ color: 0x2b2b2b }),
     spark: starTex
       ? new THREE.SpriteMaterial({ map: starTex, color: 0xffe08a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
       : null,
@@ -1645,18 +1647,29 @@ function ensureDynAssets() {
   return dynAssets;
 }
 
-// A chunky red TNT crate with dark banding and a glowing fuse spark on top.
+// A small stick of dynamite: a little bundle of red sticks with a yellow band
+// and a lit fuse spark on top.
 function makeDynamite() {
   const a = ensureDynAssets();
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(a.crate, a.body));
-  const bandTop = new THREE.Mesh(a.band, a.tape); bandTop.position.y = 1.35; g.add(bandTop);
-  const bandBot = new THREE.Mesh(a.band, a.tape); bandBot.position.y = -1.35; g.add(bandBot);
+  const offs = [[-0.48, 0.14], [0.48, 0.14], [0, -0.5]]; // three sticks bundled
+  offs.forEach((o) => {
+    const s = new THREE.Mesh(a.stick, a.body);
+    s.position.set(o[0], 0, o[1]);
+    g.add(s);
+    const band = new THREE.Mesh(a.band, a.tape);
+    band.position.set(o[0], 0.25, o[1]);
+    g.add(band);
+  });
+  const fuse = new THREE.Mesh(a.fuse, a.fuseMat);
+  fuse.position.set(0.15, 2.0, 0.05);
+  fuse.rotation.z = 0.5; // droops to one side
+  g.add(fuse);
   let spark = null;
   if (a.spark) {
     spark = new THREE.Sprite(a.spark);
-    spark.position.set(0, 3.6, 0);
-    spark.scale.set(2.4, 2.4, 2.4);
+    spark.position.set(0.42, 2.55, 0.05); // burning tip
+    spark.scale.set(1.7, 1.7, 1.7);
     spark.layers.enable(BLOOM_LAYER); // fuse glows
     g.add(spark);
   }
@@ -1700,7 +1713,7 @@ function startNextTNT(dirAfter) {
     mesh, n, cx, cz,
     phase: "fall",
     vy: -0.06,                  // eases in gently so the drop is watchable
-    targetY: topSurface + 2.6,  // rest on top of the tower
+    targetY: topSurface + 1.7,  // rest the dynamite on top of the tower
     armT: 0, fuseT: 0, blinkT: 0,
     spark: mesh.userData.spark,
     dirAfter: dirAfter || (top && top.direction === "x" ? "z" : "x"),
@@ -1762,10 +1775,10 @@ function updateTNT(dtf) {
   }
 }
 
-// Blast a block off the tower as a tumbling chunk that flies outward and falls
-// away fast (heavy gravity so it clears the screen instead of hanging).
-function flingChunk(x, y, z, width, depth, color) {
-  const { group } = makeCube(x, y, z, width, depth, color);
+// Blast a block off the tower: take the block's OWN mesh and send it tumbling
+// outward, falling away fast. (Reusing the mesh is important — creating a new
+// one would leave the original stuck on screen.)
+function flingChunk(group) {
   const ang = Math.random() * Math.PI * 2;
   const spd = 0.55 + Math.random() * 0.7;       // strong outward burst
   overhangs.push({
@@ -1829,9 +1842,10 @@ function explodeTNT(n, dirAfter, cx, cz) {
       const b = stack.pop(); // never remove the foundation
       if (b && b.threejs) {
         spawnBurst(b.threejs.position.x, b.threejs.position.y + BOX_HEIGHT / 2, b.threejs.position.z, 0xff8a3c, 5, { up: 0.7, speed: 0.34 });
-        // fly the block apart; cap live debris so a huge bomb doesn't tank perf
-        if (overhangs.length < 40) flingChunk(b.threejs.position.x, b.threejs.position.y, b.threejs.position.z, b.width, b.depth, b.color);
+        // fly the block's OWN mesh apart; cap live debris so a huge bomb is safe
+        if (overhangs.length < 40) flingChunk(b.threejs);
         else popping.push({ group: b.threejs, tw: b.width, td: b.depth, t: 0, out: true });
+        b.threejs = null; // ownership handed to the debris/shrink system
       }
       removed++;
     }
