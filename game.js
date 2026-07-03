@@ -101,14 +101,18 @@ const sfx = (n, a, b) => { try { if (window.SFX && SFX[n]) SFX[n](a, b); } catch
 // blocks). Just a little spice between gifts.
 // Each powerup is a slot with an editable amount + per-block % chance (both in Options).
 const POWERUPS = [
+  { key: "up5",      dir: "add",    amtDef: 5,    chanceDef: 0.8 },
   { key: "up25",     dir: "add",    amtDef: 25,   chanceDef: 0.63 },
   { key: "up250",    dir: "add",    amtDef: 250,  chanceDef: 0.2 },
   { key: "up1250",   dir: "add",    amtDef: 1250, chanceDef: 0.04 },
+  { key: "up5000",   dir: "add",    amtDef: 5000, chanceDef: 0.01 },
   { key: "size2x",   dir: "size",   amtDef: 2,    chanceDef: 0.1 },
   { key: "shrink2x", dir: "size",   amtDef: 0.5,  chanceDef: 0.3 },
+  { key: "down5",    dir: "remove", amtDef: 5,    chanceDef: 0.6 },
   { key: "down25",   dir: "remove", amtDef: 25,   chanceDef: 0.5 },
   { key: "down250",  dir: "remove", amtDef: 250,  chanceDef: 0.15 },
   { key: "down1250", dir: "remove", amtDef: 1250, chanceDef: 0.04 },
+  { key: "down5000", dir: "remove", amtDef: 5000, chanceDef: 0.01 },
 ];
 const clampChance = (n) => Math.max(0, Math.min(10, isNaN(n) ? 0 : Math.round(n * 100) / 100));
 // one-time rebalance: drop any old saved chances so the new lower defaults apply
@@ -2499,7 +2503,7 @@ resumeBtn.addEventListener("click", (e) => { e.stopPropagation(); if (paused) to
 pauseResetBtn.addEventListener("click", (e) => { e.stopPropagation(); softReset(); });
 
 /* ---------------- Keybinds (rebindable) ---------------- */
-const DEFAULT_BINDS = { drop: " ", pause: "escape", reset: "r", save: "s", up25: "i", up250: "o", up1250: "p", down25: "k", down250: "l", down1250: "j", size2x: "g", shrink2x: "h" };
+const DEFAULT_BINDS = { drop: " ", pause: "escape", reset: "r", save: "s", up5: "u", up25: "i", up250: "o", up1250: "p", up5000: "y", down5: "m", down25: "k", down250: "l", down1250: "j", down5000: "n", size2x: "g", shrink2x: "h" };
 function loadBinds() {
   try {
     const raw = localStorage.getItem("stack_binds");
