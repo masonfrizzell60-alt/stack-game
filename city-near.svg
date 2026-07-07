@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300">
+  <defs>
+    <pattern id="wa" width="20" height="26" patternUnits="userSpaceOnUse">
+      <rect width="20" height="26" fill="#10131f"/>
+      <rect x="5" y="6" width="8" height="10" rx="1" fill="#ffce7a" opacity="0.85"/>
+    </pattern>
+    <pattern id="wb" width="20" height="26" patternUnits="userSpaceOnUse">
+      <rect width="20" height="26" fill="#0c0f18"/>
+      <rect x="5" y="6" width="8" height="10" rx="1" fill="#ffdd92" opacity="0.45"/>
+    </pattern>
+  </defs>
+  <g>
+    <rect x="0"   y="120" width="120" height="180" fill="url(#wa)"/>
+    <rect x="125" y="170" width="90"  height="130" fill="url(#wb)"/>
+    <rect x="220" y="78"  width="140" height="222" fill="url(#wa)"/>
+    <rect x="365" y="150" width="100" height="150" fill="url(#wb)"/>
+    <rect x="470" y="58"  width="120" height="242" fill="url(#wa)"/>
+    <rect x="527" y="34"  width="6"   height="26"  fill="#10131f"/>
+    <rect x="524" y="30"  width="12"  height="6"   rx="3" fill="#ff5a5a" opacity="0.9"/>
+    <rect x="595" y="140" width="95"  height="160" fill="url(#wb)"/>
+    <rect x="695" y="100" width="130" height="200" fill="url(#wa)"/>
+    <rect x="830" y="165" width="85"  height="135" fill="url(#wb)"/>
+    <rect x="918" y="120" width="82"  height="180" fill="url(#wa)"/>
+  </g>
+</svg>

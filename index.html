@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#c0392b" />
+  <meta name="theme-color" content="#6fb3e6" />
   <title>STACK — Tower Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="elemental.css" />
   <link rel="stylesheet" href="region-detail.css" />
 </head>
 <body>
-  <script src="/gate.js"></script>
+  <script src="gate.js"></script>
   <!-- Sky layers (JS fades each in per zone): gradient, nebula, galaxy band,
        stars, aurora, a planet — all behind the tower and unlit. -->
   <div id="bg"></div>
@@ -25,6 +28,7 @@
   </div>
   <div id="core" aria-hidden="true"></div>
   <div id="motes" aria-hidden="true"></div>
+  <div id="city" aria-hidden="true"></div>
 
   <!-- Elemental region layers (Ocean / Jungle / Storm / Frozen) -->
   <div id="godrays" aria-hidden="true"></div>

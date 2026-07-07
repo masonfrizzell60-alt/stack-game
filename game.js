@@ -4,7 +4,7 @@
    - Whatever overhangs gets sliced off and falls into the void.
    - A COMPLETE miss doesn't end the run — it just drops that piece
      and spawns a fresh one to retry (forgiving, for streamers).
-   - Random vivid colors, thick black fat-line outlines, low-poly 3D.
+   - Random vivid colors, soft baked shadowing (no outline), low-poly 3D.
    - Auto-assist (Options / Ctrl+M): how close to perfect, as a % of
      the block, still snaps. 0% = exact only, 50% = very forgiving.
    - Esc pauses. Whole window is the live render surface (no letterbox).
@@ -199,6 +199,7 @@ const sunEl = document.getElementById("sun");
 const shootEl = document.getElementById("shootingStars");
 const motesEl = document.getElementById("motes");
 const coreEl = document.getElementById("core");
+const cityEl = document.getElementById("city");
 const godraysEl = document.getElementById("godrays");
 const bubblesEl = document.getElementById("bubbles");
 const jungleraysEl = document.getElementById("junglerays");
@@ -805,14 +806,16 @@ function applyVertexShade(geo) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
     const vY = y + 0.5;                       // 0 bottom .. 1 top
     const vD = ((0.5 - x) + (0.5 - z)) / 2;   // 0 front corner .. 1 back corner
-    let s = 0.66 + 0.26 * vY + 0.1 * vD;      // baked ambient occlusion (brighter overall)
+    let s = 0.62 + 0.34 * vY + 0.12 * vD;     // crisp bright top, soft-shaded sides
+    if (vY < 0.05) s *= 0.82;                 // thin contact-shadow band where blocks meet
     if (s > 1) s = 1;
     colors[i * 3] = s; colors[i * 3 + 1] = s; colors[i * 3 + 2] = s;
   }
   geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 }
 
-/* Build a cube as a Group: colored mesh + black edge outline.
+/* Build a cube as a Group: a single colored mesh — no edge outline. Blocks read
+   via soft baked shading + lighting (a slight shadow), not a black stroke.
    Group scale encodes the actual dimensions (geometry is a unit cube).
    The unique per-cube material is stored on userData.mat for disposal. */
 function makeCube(x, y, z, width, depth, color) {
@@ -824,23 +827,14 @@ function makeCube(x, y, z, width, depth, color) {
   const mat = new THREE.MeshPhongMaterial({
     color,
     vertexColors: true,                   // baked per-face gradient
-    shininess: 14,
-    specular: new THREE.Color(0x2e2e2e),  // subtle sheen
+    shininess: 22,
+    specular: new THREE.Color(0x3a3a3a),  // cleaner sheen
     polygonOffset: true,
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
   });
   group.userData.mat = mat;
   group.add(new THREE.Mesh(unitGeo, mat));
-
-  // Black outline on the 12 edges. Fat screen-space lines if available, else
-  // 1px lines. Constant thickness regardless of scale, sit ON the edges, so
-  // they don't break at stacking seams.
-  let outline;
-  if (FAT) outline = new THREE.LineSegments2(lineGeo, outlineMat);
-  else outline = new THREE.LineSegments(unitEdges, edgeMat);
-  group.add(outline);
-  group.userData.outline = outline;
 
   scene.add(group);
   return { group, mat };
@@ -1437,24 +1431,18 @@ function updateParticles() {
 }
 
 /* ---------------- Background by height (warm low -> blue sky high) ---------------- */
-// ---- Sky zones: a slow journey from open sky up to deep cosmos ----
-// Each zone: start score, sky colors (bottom/top) and how much of each thing.
-// A vertical journey: up out of the ocean, through a jungle, the open sky, a
-// storm and frozen peaks, then on into space. Each zone lists ONLY the layers it
-// shows (mix() treats missing fields as 0).
+// ---- Sky zones: a rich climb through distinct animated scenes ----
+// Each zone: start score, a two-stop gradient (bottom -> top) and the decorative
+// layers it turns on (clouds, rain, city, peaks, stars...). mix() treats any
+// missing field as 0, so a layer only shows in the zones that name it. Layers
+// hold ~80% of a zone then cross-fade (see applySky) for clean scene handoffs.
 const ZONES = [
-  { at: 0,      name: "Open Sky",      bottom: "#cfeafe", top: "#4a93dd", clouds: 0.55, sun: 1.0 },
-  { at: 300,    name: "Ocean Depths",  bottom: "#021c2b", top: "#3fb6c9", godrays: 1, bubbles: 0.9 },
-  { at: 750,    name: "Jungle Canopy", bottom: "#0b3a1e", top: "#bfe85a", pollen: 0.9, leaves: 0.7, jungle_mist: 0.55, jungle_fireflies: 1, jungle_vignette: 0.8, jv2_dapple: 0.85, jv2_shafts: 0.7, jv2_foliage: 0.9 },
-  { at: 1500,   name: "Stormfront",    bottom: "#252d39", top: "#0a0e16", stormclouds: 1, rain: 0.9, lightning: 1, storm_bankBack: 1, storm_bankFront: 1, storm_gust: 0.9, storm_bolts: 1 },
-  { at: 3000,   name: "Frozen Peaks",  bottom: "#9cc9e8", top: "#e6f4ff", snow: 1, frostAurora: 0.7, iceGlints: 0.9, frost_sun: 1, frost_aurora2: 1, frost_peaksFar: 1, frost_peaksMid: 1, frost_peaksNear: 1, frost_gusts: 1 },
-  { at: 6000,   name: "High Altitude", bottom: "#a9d6f5", top: "#1f63b0", clouds: 1.0, sun: 0.85 },
-  { at: 11000,  name: "Edge of Space", bottom: "#f0974f", top: "#101f48", clouds: 0.25, stars: 0.45, planet: 0.3, sun: 0.25 },
-  { at: 19000,  name: "Outer Space",   bottom: "#0b1733", top: "#03060f", stars: 1.0, planet: 1.0 },
-  { at: 32000,  name: "The Galaxy",    bottom: "#0d1436", top: "#070420", stars: 1.0, nebula: 0.45, band: 1.0, planet: 0.5 },
-  { at: 55000,  name: "Nebula",        bottom: "#240a3e", top: "#0c0422", stars: 1.0, nebula: 1.0, band: 0.3 },
-  { at: 90000,  name: "Aurora Void",   bottom: "#042016", top: "#02080a", stars: 1.0, nebula: 0.12, aurora: 1.0 },
-  { at: 150000, name: "The Beyond",    bottom: "#2e0a48", top: "#0c0420", stars: 1.0, nebula: 0.9, aurora: 0.4, band: 0.5, core: 1.0 },
+  { at: 0,     name: "Clear Skies",  bottom: "#dff1ff", top: "#6fb3e6", clouds: 0.7, sun: 1.0, motes: 0.25 },
+  { at: 500,   name: "Rainfall",     bottom: "#48525e", top: "#232c35", clouds: 0.25, stormclouds: 1, rain: 1, lightning: 0.85, storm_bankBack: 1, storm_bankFront: 1, storm_gust: 0.9, storm_bolts: 0.85 },
+  { at: 1600,  name: "City Lights",  bottom: "#2a2140", top: "#0e0a1e", city: 1, clouds: 0.22, planet: 0.5, motes: 0.4 },
+  { at: 3500,  name: "Mountains",    bottom: "#ffe4cf", top: "#7fb0dd", clouds: 0.5, snow: 0.45, frost_peaksFar: 1, frost_peaksMid: 1, frost_peaksNear: 1, frost_gusts: 0.8 },
+  { at: 7000,  name: "Golden Hour",  bottom: "#ffd79c", top: "#e86a44", clouds: 0.55, sun: 0.75, motes: 0.4 },
+  { at: 14000, name: "Starry Night", bottom: "#111f3d", top: "#05070f", stars: 1.0, planet: 0.8, motes: 0.5 },
 ];
 
 // Pre-parse each zone's colours once, and reuse scratch Colors, so the sky update
@@ -1522,8 +1510,9 @@ function applySky(s) {
   paintLayer(planetEl, mix(cur.planet, nxt.planet) * 0.95);
   paintLayer(sunEl, mix(cur.sun, nxt.sun));
   paintLayer(shootEl, mix(cur.stars, nxt.stars)); // shooting stars in space
-  paintLayer(motesEl, Math.max(mix(cur.stars, nxt.stars) * 0.4, mix(cur.nebula, nxt.nebula), mix(cur.aurora, nxt.aurora)) * 0.9);
+  paintLayer(motesEl, mix(cur.motes, nxt.motes));
   paintLayer(coreEl, mix(cur.core, nxt.core));
+  paintLayer(cityEl, mix(cur.city, nxt.city));
 
   // elemental regions
   paintLayer(godraysEl, mix(cur.godrays, nxt.godrays));
@@ -2156,7 +2145,7 @@ function makeGiftLabel(n, type) {
   roundRect(g, 50, 150, 156, 70, 22);
   g.fill();
   g.fillStyle = "#fff";
-  g.font = "900 60px 'Trebuchet MS', sans-serif";
+  g.font = "900 60px 'Comic Sans MS', cursive";
   g.fillText((type === "remove" ? "−" : "+") + n, 128, 188);
   const tex = new THREE.CanvasTexture(c);
   giftTexCache[key] = tex;
@@ -2177,7 +2166,7 @@ function makeSizeLabel(mult) {
   roundRect(g, 54, 150, 148, 70, 22);
   g.fill();
   g.fillStyle = "#fff";
-  g.font = "900 64px 'Trebuchet MS', sans-serif";
+  g.font = "900 64px 'Comic Sans MS', cursive";
   g.fillText(mult > 1 ? "2×" : "½", 128, 188);
   const tex = new THREE.CanvasTexture(c);
   giftTexCache[key] = tex;
