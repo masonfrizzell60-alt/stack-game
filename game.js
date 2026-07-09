@@ -488,10 +488,10 @@ function addWinGift() {
   if (wins >= winsGoal) bigWinCelebration();
 }
 
-// -1 win gift: drop a win, leave the climb untouched.
+// -1 win gift: drop a win, leave the climb untouched. Can go negative.
 function removeWinGift() {
   ensureStarted();
-  if (wins > 0) wins--;
+  wins--;
   bumpWins("sub");
   flashMsg("−1 WIN", "#ff5a52");
   sfx("dive", 0.6);
