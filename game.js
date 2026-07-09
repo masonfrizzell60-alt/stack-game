@@ -324,6 +324,68 @@ if (recordWrap) {
   recordWrap.addEventListener("pointercancel", endDrag);
 }
 
+// --- WINS cluster: user-editable position + size (drag it, or the Options slider) ---
+const winsCluster = document.getElementById("winsCluster");
+let winsX = parseFloat(loadSetting("stack_winsX", "50"));
+let winsY = parseFloat(loadSetting("stack_winsY", "3"));
+let winsSize = parseFloat(loadSetting("stack_winsSize", "100"));
+function applyWinsLayout() {
+  if (!winsCluster) return;
+  winsCluster.style.position = "fixed";
+  winsCluster.style.left = winsX + "%";
+  winsCluster.style.top = winsY + "%";
+  winsCluster.style.transform = "translateX(-50%) scale(" + (winsSize / 100) + ")";
+  winsCluster.style.transformOrigin = "top center";
+  winsCluster.style.zIndex = "6";
+}
+applyWinsLayout();
+(function () {
+  const sl = document.getElementById("winsSizeRange"), lab = document.getElementById("winsSizeVal");
+  if (!sl) return;
+  sl.value = winsSize;
+  if (lab) lab.textContent = winsSize + "%";
+  paintSlider(sl);
+  sl.addEventListener("input", () => {
+    winsSize = +sl.value;
+    if (lab) lab.textContent = winsSize + "%";
+    paintSlider(sl);
+    applyWinsLayout();
+    saveSetting("stack_winsSize", winsSize);
+  });
+})();
+if (winsCluster) {
+  let dragging = false, offX = 0, offY = 0;
+  winsCluster.addEventListener("pointerdown", (e) => {
+    if (e.isPrimary === false) return;
+    e.preventDefault();
+    e.stopPropagation(); // grabbing the counter shouldn't drop a block
+    dragging = true;
+    winsCluster.classList.add("dragging");
+    try { winsCluster.setPointerCapture(e.pointerId); } catch (x) {}
+    const r = winsCluster.getBoundingClientRect();
+    offX = e.clientX - (r.left + r.width / 2);
+    offY = e.clientY - r.top;
+  });
+  winsCluster.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const cx = e.clientX - offX, ty = e.clientY - offY;
+    winsX = Math.max(0, Math.min(100, (cx / Math.max(1, window.innerWidth)) * 100));
+    winsY = Math.max(0, Math.min(100, (ty / Math.max(1, window.innerHeight)) * 100));
+    applyWinsLayout();
+  });
+  const endWinsDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    winsCluster.classList.remove("dragging");
+    try { winsCluster.releasePointerCapture(e.pointerId); } catch (x) {}
+    saveSetting("stack_winsX", winsX);
+    saveSetting("stack_winsY", winsY);
+  };
+  winsCluster.addEventListener("pointerup", endWinsDrag);
+  winsCluster.addEventListener("pointercancel", endWinsDrag);
+}
+
 // --- Draggable multi-goal progress bar ---
 const goalBar = document.getElementById("goalBar");
 const goalTargetEl = document.getElementById("goalTarget");
@@ -349,53 +411,127 @@ goals = sortGoals(goals);
 let goalsDone = goals.filter((n) => score >= n).length; // already-passed goals (no celebration for these)
 function saveGoals() { saveSetting("stack_goals", JSON.stringify(goals)); }
 
-// --- WINS: every WIN_SCORE points = 1 win. Reach winsGoal wins = big congrats. ---
+// --- WINS: reaching WIN_SCORE points banks +1 win AND resets the tower to zero.
+//     wins is an independent counter (gift keys can +1 / -1 it). Hit winsGoal = YOU WON. ---
 const WIN_SCORE = 1000;
 const clampWinsGoal = (n) => Math.max(1, Math.min(999, Math.floor(n) || 10));
 let winsGoal = clampWinsGoal(parseInt(loadSetting("stack_winsGoal", "10"), 10));
-let lastWins = Math.min(Math.floor(score / WIN_SCORE), winsGoal); // edge tracker for celebrations
-let winResetPending = false; // true during the 10-win celebration before it loops back to 0
+let wins = 0;                 // banked wins, independent of the live score
+let winCelebrating = false;   // true during the "YOU WON" celebration
+let winThreshold = false;     // score crossed WIN_SCORE; the reset is deferred to a safe frame
 const winsEl = document.getElementById("wins");
 const winsNumEl = document.querySelector("#wins .wins-num");
 const winsGoalEl = document.querySelector("#wins .wins-goal");
 const winBannerEl = document.getElementById("winBanner");
 let winBannerTimer = null;
 
+function bumpWins(kind) { // "" gold pop, "add" green, "sub" red
+  if (!winsEl) return;
+  winsEl.classList.remove("bump", "bump-add", "bump-sub");
+  void winsEl.offsetWidth;
+  winsEl.classList.add(kind === "add" ? "bump-add" : kind === "sub" ? "bump-sub" : "bump");
+}
+
 function refreshWinsHud() {
-  const w = Math.min(Math.floor(score / WIN_SCORE), winsGoal);
-  if (winsNumEl) winsNumEl.textContent = w;
+  if (winsNumEl) winsNumEl.textContent = Math.min(wins, winsGoal);
   if (winsGoalEl) winsGoalEl.textContent = winsGoal;
+}
+
+// The next-win progress bar: 0 -> WIN_SCORE, resets every time you bank a win.
+function refreshWinBar() {
+  if (!goalBar) return;
+  if (!goalShow) { goalBar.classList.add("hidden"); return; }
+  goalBar.classList.remove("hidden");
+  goalBar.classList.remove("alldone");
+  goalTargetEl.textContent = WIN_SCORE.toLocaleString();
+  goalFillEl.style.width = Math.max(0, Math.min(100, (score / WIN_SCORE) * 100)) + "%";
+}
+
+// Named refreshGoal() because refreshScore() calls it; drives HUD + bar + win detection.
+function refreshGoal() {
+  refreshWinsHud();
+  refreshWinBar();
+  if (score >= WIN_SCORE && !winThreshold && !winCelebrating) winThreshold = true; // bank on a safe frame
+}
+
+// Called from animate() once the tower is settled (no gift build mid-flight): bank the
+// win(s) the score earned, then reset the climb back to zero.
+function bankScoreWin() {
+  if (!winThreshold || buildActive || tntBusy || winCelebrating) return;
+  winThreshold = false;
+  const earned = Math.max(1, Math.floor(score / WIN_SCORE));
+  wins += earned;
+  winGainFX(earned);
+  if (wins >= winsGoal) {
+    bigWinCelebration();  // resets everything itself
+  } else {
+    softReset();          // reset the tower to zero, keep the banked wins
+    refreshScore();
+  }
+}
+
+// Celebration for gaining win(s): green pop, confetti, chime.
+function winGainFX(n) {
+  pulseGoal();
+  bumpWins("add");
+  spawnConfetti(n > 1 ? 70 : 45);
+  flashMsg("🏆 " + (n > 1 ? "+" + n + " WINS!" : "+1 WIN!"), "#ffd14d");
+  sfx("milestone");
+  refreshWinsHud();
+}
+
+// +1 win gift: bank a win WITHOUT resetting the current climb.
+function addWinGift() {
+  ensureStarted();
+  wins++;
+  winGainFX(1);
+  if (wins >= winsGoal) bigWinCelebration();
+}
+
+// -1 win gift: drop a win, leave the climb untouched.
+function removeWinGift() {
+  ensureStarted();
+  if (wins > 0) wins--;
+  bumpWins("sub");
+  flashMsg("−1 WIN", "#ff5a52");
+  sfx("dive", 0.6);
+  addShake(0.45);
+  refreshWinsHud();
 }
 
 function showWinBanner() {
   if (!winBannerEl) return;
+  const titleEl = winBannerEl.querySelector(".wb-title");
   const subEl = winBannerEl.querySelector(".wb-sub");
+  if (titleEl) titleEl.textContent = "YOU WON!";
   if (subEl) subEl.textContent = winsGoal + (winsGoal === 1 ? " WIN" : " WINS");
   winBannerEl.classList.remove("show");
   void winBannerEl.offsetWidth; // restart entrance
   winBannerEl.classList.add("show");
   if (winBannerTimer) clearTimeout(winBannerTimer);
-  winBannerTimer = setTimeout(() => winBannerEl.classList.remove("show"), 2600);
+  winBannerTimer = setTimeout(() => winBannerEl.classList.remove("show"), 2400);
 }
 
-// The big payoff when you hit winsGoal wins: confetti storm + fanfare, then loop to 0.
+// Hitting winsGoal: a compact "YOU WON" banner + fanfare, then reset to zero wins.
 function bigWinCelebration() {
-  winResetPending = true;
-  spawnConfetti(230);
-  flashMsg("🎉 " + winsGoal + (winsGoal === 1 ? " WIN!" : " WINS!") + " 🎉", "#ffd14d");
+  if (winCelebrating) return;
+  winCelebrating = true;
+  winThreshold = false;
+  refreshWinsHud();
+  bumpWins("");
+  spawnConfetti(180);
   showWinBanner();
-  addShake(1.2);
+  addShake(1.0);
   sfx("boom", true);
   sfx("milestone");
-  setTimeout(() => { sfx("save"); spawnConfetti(120); }, 260);
-  setTimeout(() => { sfx("milestone"); }, 520);
-  // celebrate, then start a fresh run back at zero wins (deferred so no reset mid-frame)
+  setTimeout(() => { sfx("save"); spawnConfetti(90); }, 240);
+  setTimeout(() => { sfx("milestone"); }, 480);
   setTimeout(() => {
-    winResetPending = false;
-    softReset();
-    lastWins = 0;
+    winCelebrating = false;
+    wins = 0;
+    softReset();   // back to the very beginning
     refreshScore();
-  }, 2600);
+  }, 2400);
 }
 
 function applyGoalLayout() {
@@ -431,42 +567,6 @@ function spawnConfetti(count) {
 function pulseGoal() {
   if (!goalBar) return;
   goalBar.classList.remove("pulse"); void goalBar.offsetWidth; goalBar.classList.add("pulse");
-}
-
-// Called from refreshScore() so the next-win bar + wins counter track the live score.
-function refreshGoal() {
-  refreshWinsHud();
-  const totalWins = Math.floor(score / WIN_SCORE);      // uncapped (can jump on a big gift)
-  const capped = Math.min(totalWins, winsGoal);
-  const reachedGoal = totalWins >= winsGoal;
-
-  if (goalBar) {
-    if (!goalShow) {
-      goalBar.classList.add("hidden");
-    } else {
-      goalBar.classList.remove("hidden");
-      const within = score - totalWins * WIN_SCORE;     // progress into the current 1000
-      const pct = reachedGoal ? 100 : Math.max(0, Math.min(100, (within / WIN_SCORE) * 100));
-      goalTargetEl.textContent = reachedGoal
-        ? winsGoal + " / " + winsGoal + " 🏆"
-        : ((totalWins + 1) * WIN_SCORE).toLocaleString();
-      goalFillEl.style.width = pct + "%";
-      goalBar.classList.toggle("alldone", reachedGoal);
-    }
-  }
-
-  if (capped > lastWins) { // one or more wins just banked
-    pulseGoal();
-    if (winsEl) { winsEl.classList.remove("bump"); void winsEl.offsetWidth; winsEl.classList.add("bump"); }
-    if (reachedGoal && !winResetPending) {
-      bigWinCelebration();
-    } else if (!winResetPending) {
-      spawnConfetti(55);
-      flashMsg("🏆 WIN " + capped + "/" + winsGoal + "!", "#ffd14d");
-      sfx("milestone");
-    }
-  }
-  lastWins = capped;
 }
 
 // Options: editable goal list with add / remove (auto-sorted on edit).
@@ -521,7 +621,7 @@ refreshGoal();
     winsGoal = clampWinsGoal(+inp.value);
     inp.value = winsGoal;
     saveSetting("stack_winsGoal", winsGoal);
-    lastWins = Math.min(Math.floor(score / WIN_SCORE), winsGoal); // re-baseline, no celebration
+    if (wins >= winsGoal && !winCelebrating) bigWinCelebration(); // lowering the goal below your wins = instant win
     refreshScore();
   };
   inp.addEventListener("change", apply);
@@ -973,7 +1073,7 @@ function resetGame() {
   flashOutlines = [];
   shake = 0;
   score = 0;
-  lastWins = 0; // fresh run = 0 wins banked; no stale win celebration on the next point
+  winThreshold = false; // clear any pending win-reset; wins themselves are managed by callers
   combo = 0;
   camY = 0;
   camKick = 0;
@@ -1021,6 +1121,8 @@ function resetGame() {
 function startGame() {
   if (gameStarted) return; // idempotent: ignore redundant starts (pointerdown + click)
   resetGame();
+  wins = 0;          // a brand-new game starts with zero banked wins
+  refreshScore();    // paint the wins HUD + next-win bar to their zero state
   gameStarted = true;
   overlay.classList.add("hidden");
   sfx("resume");
@@ -1200,6 +1302,7 @@ function showCombo() {
 /* ---------------- Animation loop (O(1) per frame) ---------------- */
 function animate() {
   actionLocked = false; // one action allowed per frame
+  bankScoreWin();       // if the score just crossed 1000 and the tower is settled, bank a win + reset
 
   // frame-rate-independent timing: 1.0 at 60fps, ~2.0 at 30fps (clamped so a lag
   // spike / tab refocus can't teleport a block across the screen)
@@ -2483,6 +2586,8 @@ function doReset() {
   resetActive = false;
   resetTimerEl.classList.add("hidden");
   resetTimerEl.classList.remove("urgent");
+  wins = 0;        // the reset gift is a full wipe: clear banked wins too
+  winCelebrating = false;
   softReset();
   refreshScore();
   flashMsg("RESET!", "#ff5a52");
@@ -2536,10 +2641,10 @@ if (volRange) {
 /* per-powerup chance sliders + search are wired up in buildChanceSliders()/applySearch() */
 optClose.addEventListener("click", (e) => { e.stopPropagation(); optionsPanel.classList.remove("open"); });
 resumeBtn.addEventListener("click", (e) => { e.stopPropagation(); if (paused) togglePause(); });
-pauseResetBtn.addEventListener("click", (e) => { e.stopPropagation(); softReset(); });
+pauseResetBtn.addEventListener("click", (e) => { e.stopPropagation(); wins = 0; winCelebrating = false; softReset(); refreshScore(); });
 
 /* ---------------- Keybinds (rebindable) ---------------- */
-const DEFAULT_BINDS = { drop: " ", pause: "escape", reset: "r", up5: "u", up25: "i", up250: "o", up1250: "p", up5000: "y", down5: "m", down25: "k", down250: "l", down1250: "j", down5000: "n", size2x: "g", shrink2x: "h" };
+const DEFAULT_BINDS = { drop: " ", pause: "escape", reset: "r", addwin: "1", subwin: "2", up5: "u", up25: "i", up250: "o", up1250: "p", up5000: "y", down5: "m", down25: "k", down250: "l", down1250: "j", down5000: "n", size2x: "g", shrink2x: "h" };
 function loadBinds() {
   try {
     const raw = localStorage.getItem("stack_binds");
@@ -2650,6 +2755,10 @@ window.addEventListener("keydown", (e) => {
     if (gameStarted && !gameOver) togglePause();
   } else if (k === binds.reset) {
     e.preventDefault(); ensureStarted(); doReset();
+  } else if (k === binds.addwin) {
+    e.preventDefault(); addWinGift();
+  } else if (k === binds.subwin) {
+    e.preventDefault(); removeWinGift();
   } else {
     for (const p of POWERUPS) {
       if (k === binds[p.key]) { e.preventDefault(); armPowerup(p); break; }

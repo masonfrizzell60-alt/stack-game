@@ -87,14 +87,17 @@
         <span class="record-label">WORLD RECORD!</span>
         <span id="recordValue">0</span>
       </div>
-      <div id="score">0</div>
-      <div id="wins">
-        <span class="wins-label">WINS</span>
-        <span class="wins-num">0</span>
-        <span class="wins-sep">/</span>
-        <span class="wins-goal">10</span>
+      <!-- Draggable + scalable cluster: WINS is the hero, score + combo tuck beneath it -->
+      <div id="winsCluster">
+        <div id="wins">
+          <span class="wins-label">WINS</span>
+          <span class="wins-num">0</span>
+          <span class="wins-sep">/</span>
+          <span class="wins-goal">10</span>
+        </div>
+        <div id="score">0</div>
+        <div id="combo"></div>
       </div>
-      <div id="combo"></div>
     </div>
     <!-- three.js canvas is appended here -->
   </div>
@@ -176,9 +179,12 @@
 
     <div class="opt-card" data-sec="Wins">
       <div class="opt-label"><span class="opt-name">Wins to win</span><input id="winsGoalInput" type="number" min="1" max="999" step="1" class="opt-num" /></div>
-      <p class="opt-help">Every 1,000 points scores one win. Reach this many wins and you get the big celebration. Set it to 5, 10, 15, 20 — whatever you want.</p>
+      <p class="opt-help">Every 1,000 points banks one win and resets your climb. Reach this many wins for the big “YOU WON” celebration. Set it to 5, 10, 15, 20 — whatever you want.</p>
+      <div class="opt-label" style="margin-top:12px;"><span class="opt-name">Wins counter · size</span><span id="winsSizeVal" class="opt-val">100%</span></div>
+      <input id="winsSizeRange" type="range" min="50" max="300" step="5" value="100" />
+      <p class="opt-help">Drag the WINS counter anywhere on screen to place it. This slider scales it up or down.</p>
       <label class="opt-toggle" style="margin-top:12px;"><span class="opt-name">Show next-win bar</span><input type="checkbox" id="goalShow" checked /><span class="opt-sw"></span></label>
-      <p class="opt-help">The progress bar tracking your climb to the next win. Drag it anywhere to place it.</p>
+      <p class="opt-help">The progress bar tracking your climb to the next win (1,000). Drag it anywhere to place it.</p>
       <div class="opt-label" style="margin-top:12px;"><span class="opt-name">Bar · size</span><span id="goalSizeVal" class="opt-val">100%</span></div>
       <input id="goalSizeRange" type="range" min="50" max="250" step="5" value="100" />
       <div class="opt-ovl">
@@ -197,6 +203,8 @@
       <div class="keys-divider">Gift triggers</div>
       <div class="keys">
         <div class="key-row"><span>Reset run (instant)</span><kbd class="bind" data-bind="reset">R</kbd></div>
+        <div class="key-row"><span>+1 win (keep climb)</span><kbd class="bind" data-bind="addwin">1</kbd></div>
+        <div class="key-row"><span>−1 win (keep climb)</span><kbd class="bind" data-bind="subwin">2</kbd></div>
         <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up5" /> blocks</span><kbd class="bind" data-bind="up5">U</kbd></div>
         <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up25" /> blocks</span><kbd class="bind" data-bind="up25">I</kbd></div>
         <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up250" /> blocks</span><kbd class="bind" data-bind="up250">O</kbd></div>
