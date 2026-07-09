@@ -349,6 +349,55 @@ goals = sortGoals(goals);
 let goalsDone = goals.filter((n) => score >= n).length; // already-passed goals (no celebration for these)
 function saveGoals() { saveSetting("stack_goals", JSON.stringify(goals)); }
 
+// --- WINS: every WIN_SCORE points = 1 win. Reach winsGoal wins = big congrats. ---
+const WIN_SCORE = 1000;
+const clampWinsGoal = (n) => Math.max(1, Math.min(999, Math.floor(n) || 10));
+let winsGoal = clampWinsGoal(parseInt(loadSetting("stack_winsGoal", "10"), 10));
+let lastWins = Math.min(Math.floor(score / WIN_SCORE), winsGoal); // edge tracker for celebrations
+let winResetPending = false; // true during the 10-win celebration before it loops back to 0
+const winsEl = document.getElementById("wins");
+const winsNumEl = document.querySelector("#wins .wins-num");
+const winsGoalEl = document.querySelector("#wins .wins-goal");
+const winBannerEl = document.getElementById("winBanner");
+let winBannerTimer = null;
+
+function refreshWinsHud() {
+  const w = Math.min(Math.floor(score / WIN_SCORE), winsGoal);
+  if (winsNumEl) winsNumEl.textContent = w;
+  if (winsGoalEl) winsGoalEl.textContent = winsGoal;
+}
+
+function showWinBanner() {
+  if (!winBannerEl) return;
+  const subEl = winBannerEl.querySelector(".wb-sub");
+  if (subEl) subEl.textContent = winsGoal + (winsGoal === 1 ? " WIN" : " WINS");
+  winBannerEl.classList.remove("show");
+  void winBannerEl.offsetWidth; // restart entrance
+  winBannerEl.classList.add("show");
+  if (winBannerTimer) clearTimeout(winBannerTimer);
+  winBannerTimer = setTimeout(() => winBannerEl.classList.remove("show"), 2600);
+}
+
+// The big payoff when you hit winsGoal wins: confetti storm + fanfare, then loop to 0.
+function bigWinCelebration() {
+  winResetPending = true;
+  spawnConfetti(230);
+  flashMsg("🎉 " + winsGoal + (winsGoal === 1 ? " WIN!" : " WINS!") + " 🎉", "#ffd14d");
+  showWinBanner();
+  addShake(1.2);
+  sfx("boom", true);
+  sfx("milestone");
+  setTimeout(() => { sfx("save"); spawnConfetti(120); }, 260);
+  setTimeout(() => { sfx("milestone"); }, 520);
+  // celebrate, then start a fresh run back at zero wins (deferred so no reset mid-frame)
+  setTimeout(() => {
+    winResetPending = false;
+    softReset();
+    lastWins = 0;
+    refreshScore();
+  }, 2600);
+}
+
 function applyGoalLayout() {
   if (!goalBar) return;
   goalBar.style.setProperty("--gscale", goalSize / 100);
@@ -384,35 +433,40 @@ function pulseGoal() {
   goalBar.classList.remove("pulse"); void goalBar.offsetWidth; goalBar.classList.add("pulse");
 }
 
-// Called from refreshScore() so the bar tracks the live score.
+// Called from refreshScore() so the next-win bar + wins counter track the live score.
 function refreshGoal() {
-  if (!goalBar) return;
-  const g = goals;
-  if (!goalShow || !g.length) { goalBar.classList.add("hidden"); return; }
-  goalBar.classList.remove("hidden");
-  let done = 0;
-  for (const v of g) if (score >= v) done++;
-  const allDone = done >= g.length;
-  const target = allDone ? g[g.length - 1] : g[done];
-  const prev = allDone ? (g[g.length - 2] || 0) : (done > 0 ? g[done - 1] : 0);
-  const pct = allDone ? 100 : Math.max(0, Math.min(100, ((score - prev) / Math.max(1, target - prev)) * 100));
-  goalTargetEl.textContent = target.toLocaleString();
-  goalFillEl.style.width = pct + "%";
-  goalBar.classList.toggle("alldone", allDone);
+  refreshWinsHud();
+  const totalWins = Math.floor(score / WIN_SCORE);      // uncapped (can jump on a big gift)
+  const capped = Math.min(totalWins, winsGoal);
+  const reachedGoal = totalWins >= winsGoal;
 
-  if (done > goalsDone) { // a new goal (or several) just got hit
-    pulseGoal();
-    if (allDone) {
-      spawnConfetti(170);
-      flashMsg("🏆 ALL GOALS COMPLETE!", "#ffd14d");
-      sfx("boom", true);
+  if (goalBar) {
+    if (!goalShow) {
+      goalBar.classList.add("hidden");
     } else {
-      spawnConfetti(45);
-      flashMsg("🎯 GOAL! " + g[done - 1].toLocaleString(), "#ffd14d");
+      goalBar.classList.remove("hidden");
+      const within = score - totalWins * WIN_SCORE;     // progress into the current 1000
+      const pct = reachedGoal ? 100 : Math.max(0, Math.min(100, (within / WIN_SCORE) * 100));
+      goalTargetEl.textContent = reachedGoal
+        ? winsGoal + " / " + winsGoal + " 🏆"
+        : ((totalWins + 1) * WIN_SCORE).toLocaleString();
+      goalFillEl.style.width = pct + "%";
+      goalBar.classList.toggle("alldone", reachedGoal);
+    }
+  }
+
+  if (capped > lastWins) { // one or more wins just banked
+    pulseGoal();
+    if (winsEl) { winsEl.classList.remove("bump"); void winsEl.offsetWidth; winsEl.classList.add("bump"); }
+    if (reachedGoal && !winResetPending) {
+      bigWinCelebration();
+    } else if (!winResetPending) {
+      spawnConfetti(55);
+      flashMsg("🏆 WIN " + capped + "/" + winsGoal + "!", "#ffd14d");
       sfx("milestone");
     }
   }
-  goalsDone = done;
+  lastWins = capped;
 }
 
 // Options: editable goal list with add / remove (auto-sorted on edit).
@@ -456,6 +510,22 @@ refreshGoal();
     saveSetting("stack_goalShow", goalShow ? "1" : "0");
     refreshGoal();
   });
+})();
+
+// Editable "wins to win" target (default 10).
+(function () {
+  const inp = document.getElementById("winsGoalInput");
+  if (!inp) return;
+  inp.value = winsGoal;
+  const apply = () => {
+    winsGoal = clampWinsGoal(+inp.value);
+    inp.value = winsGoal;
+    saveSetting("stack_winsGoal", winsGoal);
+    lastWins = Math.min(Math.floor(score / WIN_SCORE), winsGoal); // re-baseline, no celebration
+    refreshScore();
+  };
+  inp.addEventListener("change", apply);
+  inp.addEventListener("focus", () => inp.select());
 })();
 
 {
@@ -903,6 +973,7 @@ function resetGame() {
   flashOutlines = [];
   shake = 0;
   score = 0;
+  lastWins = 0; // fresh run = 0 wins banked; no stale win celebration on the next point
   combo = 0;
   camY = 0;
   camKick = 0;
@@ -970,30 +1041,15 @@ function placeBlock() {
   const overlap = size - overhangSize;
 
   if (overlap <= 0) {
-    // COMPLETE MISS — the piece tumbles into the void, but you're NOT out.
-    // Drop it and spawn a fresh piece to retry this same level.
-    addOverhang(
-      top.threejs.position.x, top.threejs.position.y, top.threejs.position.z,
-      top.width, top.depth, top.color, -0.05
-    );
-    disposeCube(top.threejs);
-    top.threejs = null;
-    stack.pop();
-    combo = 0;
-    comboEl.classList.remove("show");
-    // A whiff arms a -25 onto the held block (doesn't dock score now). Keep missing
-    // and it stacks (-50, -75...); it only hits your score once you place it.
-    pendingNet -= 25;
-    pendingSize = 1;
-    flashMsg("-25!", "#ff5a52");
+    // COMPLETE MISS — a whiff now WIPES the whole run back to zero (it used to just
+    // chip -25). One good miss and you start the climb over.
     sfx("miss");
-
-    const base = stack[stack.length - 1]; // the block we're retrying onto
-    const retryX = dir === "x" ? -SPAWN_OFFSET : base.threejs.position.x;
-    const retryZ = dir === "z" ? -SPAWN_OFFSET : base.threejs.position.z;
-    addLayer(retryX, retryZ, base.width, base.depth, dir);
-    setGiftVisual(); // re-show the rocket on the retry block if still armed
-    addShake(0.4);   // thud
+    pendingNet = 0;
+    pendingSize = 1;
+    softReset();      // tear the tower down and rebuild from a fresh base
+    refreshScore();   // sync score + wins counter to 0
+    flashMsg("MISS — BACK TO ZERO!", "#ff5a52");
+    addShake(1.2);
     return;
   }
 
@@ -2434,15 +2490,6 @@ function doReset() {
   sfx("reset");
 }
 
-function saveRun() {
-  addShake(0.5);
-  sfx("save");
-  spawnConfetti(120); // celebrate the save
-  if (resetActive) { cancelReset(true); return; } // a save cancels the countdown
-  saveSetting("stack_savedScore", score);
-  flashMsg("SAVED!", "#6bff5a");
-}
-
 /* ---------------- Auto-pause when the tab/window loses focus ---------------- */
 function pauseForBlur() {
   if (gameStarted && !gameOver && !paused) togglePause();
@@ -2492,7 +2539,7 @@ resumeBtn.addEventListener("click", (e) => { e.stopPropagation(); if (paused) to
 pauseResetBtn.addEventListener("click", (e) => { e.stopPropagation(); softReset(); });
 
 /* ---------------- Keybinds (rebindable) ---------------- */
-const DEFAULT_BINDS = { drop: " ", pause: "escape", reset: "r", save: "s", up5: "u", up25: "i", up250: "o", up1250: "p", up5000: "y", down5: "m", down25: "k", down250: "l", down1250: "j", down5000: "n", size2x: "g", shrink2x: "h" };
+const DEFAULT_BINDS = { drop: " ", pause: "escape", reset: "r", up5: "u", up25: "i", up250: "o", up1250: "p", up5000: "y", down5: "m", down25: "k", down250: "l", down1250: "j", down5000: "n", size2x: "g", shrink2x: "h" };
 function loadBinds() {
   try {
     const raw = localStorage.getItem("stack_binds");
@@ -2602,9 +2649,7 @@ window.addEventListener("keydown", (e) => {
   } else if (k === binds.pause) {
     if (gameStarted && !gameOver) togglePause();
   } else if (k === binds.reset) {
-    e.preventDefault(); startResetCountdown();
-  } else if (k === binds.save) {
-    e.preventDefault(); saveRun();
+    e.preventDefault(); ensureStarted(); doReset();
   } else {
     for (const p of POWERUPS) {
       if (k === binds[p.key]) { e.preventDefault(); armPowerup(p); break; }

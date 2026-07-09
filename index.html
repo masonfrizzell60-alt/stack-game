@@ -88,6 +88,12 @@
         <span id="recordValue">0</span>
       </div>
       <div id="score">0</div>
+      <div id="wins">
+        <span class="wins-label">WINS</span>
+        <span class="wins-num">0</span>
+        <span class="wins-sep">/</span>
+        <span class="wins-goal">10</span>
+      </div>
       <div id="combo"></div>
     </div>
     <!-- three.js canvas is appended here -->
@@ -110,12 +116,20 @@
   <!-- Confetti / win VFX layer -->
   <div id="confetti" aria-hidden="true"></div>
 
+  <!-- Big "all wins complete" congratulations banner -->
+  <div id="winBanner" aria-hidden="true">
+    <div class="wb-inner">
+      <div class="wb-title">CONGRATULATIONS!</div>
+      <div class="wb-sub">10 WINS</div>
+    </div>
+  </div>
+
   <!-- Region-entered banner -->
   <div id="zoneBanner"></div>
 
   <!-- Draggable goal progress bar -->
   <div id="goalBar" aria-hidden="true">
-    <div class="goal-top"><span class="goal-label">GOAL</span><span id="goalTarget">10,000</span></div>
+    <div class="goal-top"><span class="goal-label">NEXT WIN</span><span id="goalTarget">1,000</span></div>
     <div class="goal-track"><div id="goalFill" class="goal-fill"></div></div>
   </div>
 
@@ -160,15 +174,15 @@
       </div>
     </div>
 
-    <div class="opt-card" data-sec="Goals">
-      <label class="opt-toggle"><span class="opt-name">Show goal bar</span><input type="checkbox" id="goalShow" checked /><span class="opt-sw"></span></label>
-      <p class="opt-help">Add target scores — the bar walks through them in order (auto-sorted). Each one sets off a celebration, and clearing them all triggers a big win. Drag the bar to place it; an empty list hides it.</p>
-      <div id="goalList"></div>
-      <button id="addGoalBtn" class="opt-add">+ Add goal</button>
-      <div class="opt-label" style="margin-top:12px;"><span class="opt-name">Goal · size</span><span id="goalSizeVal" class="opt-val">100%</span></div>
+    <div class="opt-card" data-sec="Wins">
+      <div class="opt-label"><span class="opt-name">Wins to win</span><input id="winsGoalInput" type="number" min="1" max="999" step="1" class="opt-num" /></div>
+      <p class="opt-help">Every 1,000 points scores one win. Reach this many wins and you get the big celebration. Set it to 5, 10, 15, 20 — whatever you want.</p>
+      <label class="opt-toggle" style="margin-top:12px;"><span class="opt-name">Show next-win bar</span><input type="checkbox" id="goalShow" checked /><span class="opt-sw"></span></label>
+      <p class="opt-help">The progress bar tracking your climb to the next win. Drag it anywhere to place it.</p>
+      <div class="opt-label" style="margin-top:12px;"><span class="opt-name">Bar · size</span><span id="goalSizeVal" class="opt-val">100%</span></div>
       <input id="goalSizeRange" type="range" min="50" max="250" step="5" value="100" />
       <div class="opt-ovl">
-        <div class="opt-ovl-label">OBS overlay link — goal only</div>
+        <div class="opt-ovl-label">OBS overlay link — next-win bar only</div>
         <div class="goal-row"><input class="opt-num goal-num ovl-url" data-ovl="goal" readonly placeholder="…" /><button class="ovl-copy" type="button">Copy</button></div>
       </div>
     </div>
@@ -182,8 +196,7 @@
       </div>
       <div class="keys-divider">Gift triggers</div>
       <div class="keys">
-        <div class="key-row"><span>Reset run (60s)</span><kbd class="bind" data-bind="reset">R</kbd></div>
-        <div class="key-row"><span>Save the run</span><kbd class="bind" data-bind="save">S</kbd></div>
+        <div class="key-row"><span>Reset run (instant)</span><kbd class="bind" data-bind="reset">R</kbd></div>
         <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up5" /> blocks</span><kbd class="bind" data-bind="up5">U</kbd></div>
         <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up25" /> blocks</span><kbd class="bind" data-bind="up25">I</kbd></div>
         <div class="key-row"><span class="amt-edit">+<input type="number" min="1" step="1" class="amt-num" data-amt="up250" /> blocks</span><kbd class="bind" data-bind="up250">O</kbd></div>
